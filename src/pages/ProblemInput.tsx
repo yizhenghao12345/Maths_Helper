@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send } from 'lucide-react'
-import { submitProblem } from '@/api'
+import { ArrowLeft, Send, Upload, Image, X, Loader2 } from 'lucide-react'
+import { submitProblem, recognizeImage } from '@/api'
 import { useStore } from '@/store/useStore'
 
 const ProblemInput = () => {
@@ -9,10 +9,60 @@ const ProblemInput = () => {
   const [problem, setProblem] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [isRecognizing, setIsRecognizing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const setSessionId = useStore((state) => state.setSessionId)
   const setNodesAndEdges = useStore((state) => state.setNodesAndEdges)
   const setQuestion = useStore((state) => state.setQuestion)
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setError('请选择图片文件')
+      return
+    }
+
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setImagePreview(event.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+    setError('')
+  }
+
+  const handleRecognize = async () => {
+    if (!imageFile) return
+
+    setIsRecognizing(true)
+    setError('')
+
+    try {
+      const result = await recognizeImage(imageFile)
+      if (result.text) {
+        setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
+      } else {
+        setError('未识别到文字内容')
+      }
+    } catch (err) {
+      setError('图片识别失败,请重试')
+    } finally {
+      setIsRecognizing(false)
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
   const handleSubmit = async () => {
     if (!problem.trim()) {
@@ -60,7 +110,54 @@ const ProblemInput = () => {
             输入你要解决的数学题目,系统将为你生成思维推导图
           </p>
 
+          {imagePreview && (
+            <div className="mb-6 relative">
+              <div className="relative inline-block">
+                <img
+                  src={imagePreview}
+                  alt="预览"
+                  className="max-h-64 rounded-xl border-2 border-gray-200 object-contain"
+                />
+                <button
+                  onClick={handleRemoveImage}
+                  className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <button
+                onClick={handleRecognize}
+                disabled={isRecognizing}
+                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRecognizing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Image className="w-4 h-4" />
+                )}
+                {isRecognizing ? '识别中...' : '识别图片文字'}
+              </button>
+            </div>
+          )}
+
           <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                <span>上传图片</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            </div>
+
             <textarea
               value={problem}
               onChange={(e) => setProblem(e.target.value)}

@@ -1,9 +1,10 @@
 import sys
 sys.path.append('.')
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
+import base64
 
 from models import (
     SubmitProblemRequest,
@@ -14,6 +15,7 @@ from models import (
 from session_store import session_store
 from problem_parser import parse_problem
 from question_generator import generate_question
+from ocr_service import extract_text_from_base64
 
 app = FastAPI(title="数学思维训练助手 API", version="0.0.1")
 
@@ -60,6 +62,18 @@ async def answer_question(request: QuestionRequest):
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "version": "0.0.1"}
+
+
+@app.post("/ocr/recognize")
+async def recognize_image(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="仅支持图片文件")
+
+    image_bytes = await file.read()
+    base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
+    text = extract_text_from_base64(base64_data)
+
+    return {"text": text}
 
 
 if __name__ == "__main__":

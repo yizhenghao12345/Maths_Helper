@@ -34,3 +34,19 @@ export async function answerQuestion(
 
   return response.json()
 }
+
+export async function recognizeImage(file: File): Promise<{ text: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch('/api/ocr/recognize', {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    throw new Error('图片识别失败')
+  }
+
+  return response.json()
+}
