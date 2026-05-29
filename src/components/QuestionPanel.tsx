@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle, XCircle, ChevronRight, RefreshCw } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { answerQuestion } from '@/api'
 import { useStore } from '@/store/useStore'
@@ -13,6 +13,7 @@ const QuestionPanel = () => {
   const appendNodesAndEdges = useStore((state) => state.appendNodesAndEdges)
 
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null)
+  const [needsRetreat, setNeedsRetreat] = useState(false)
 
   const handleAnswer = async (answer: string) => {
     if (!deduction.sessionId) return
@@ -28,18 +29,22 @@ const QuestionPanel = () => {
       )
 
       setLastAnswerCorrect(response.isCorrect)
-      setFeedback(response.feedback || null)
+      setNeedsRetreat(response.needsRetreat || false)
 
-      if (response.isCorrect) {
-        if (response.nextNodes && response.nextEdges) {
-          appendNodesAndEdges(response.nextNodes, response.nextEdges)
-        }
+      if (response.nextNodes && response.nextEdges) {
+        appendNodesAndEdges(response.nextNodes, response.nextEdges)
+      }
 
-        if (response.isCompleted) {
-          setCompleted(true, response.finalSolution)
-        } else if (response.nextQuestion && response.options) {
-          setQuestion(response.nextQuestion, response.options)
-        }
+      if (response.needsRetreat && response.retreatMessage) {
+        setFeedback(response.retreatMessage)
+      } else {
+        setFeedback(response.feedback || null)
+      }
+
+      if (response.isCompleted) {
+        setCompleted(true, response.finalSolution)
+      } else if (response.nextQuestion && response.options) {
+        setQuestion(response.nextQuestion, response.options)
       }
     } catch (err) {
       setFeedback('提交失败,请重试')
@@ -120,18 +125,22 @@ const QuestionPanel = () => {
         {deduction.feedback && (
           <div
             className={`mt-6 px-4 py-3 rounded-xl ${
-              lastAnswerCorrect
+              lastAnswerCorrect === true
                 ? 'bg-green-50 text-green-700 border border-green-200'
+                : needsRetreat
+                ? 'bg-red-50 text-red-700 border border-red-200'
                 : 'bg-orange-50 text-orange-700 border border-orange-200'
             }`}
           >
             <div className="flex items-start gap-2">
-              {lastAnswerCorrect ? (
+              {lastAnswerCorrect === true ? (
                 <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              ) : needsRetreat ? (
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               ) : (
                 <XCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               )}
-              <p className="text-sm leading-relaxed">{deduction.feedback}</p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{deduction.feedback}</p>
             </div>
           </div>
         )}

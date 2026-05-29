@@ -5,6 +5,10 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import base64
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from models import (
     SubmitProblemRequest,
@@ -16,6 +20,7 @@ from session_store import session_store
 from problem_parser import parse_problem
 from question_generator import generate_question
 from ocr_service import extract_text_from_base64
+from ai_service import ai_service
 
 app = FastAPI(title="数学思维训练助手 API", version="0.0.1")
 
@@ -32,7 +37,7 @@ app.add_middleware(
 async def submit_problem(request: SubmitProblemRequest):
     session_id = f"session_{uuid.uuid4().hex[:8]}"
 
-    nodes, edges = parse_problem(request.problem)
+    nodes, edges = await parse_problem(request.problem)
 
     session = session_store.create_session(session_id, request.problem)
     session.nodes = nodes
@@ -49,7 +54,7 @@ async def answer_question(request: QuestionRequest):
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
 
-    response = generate_question(session, request.userAnswer, request.currentNodeId)
+    response = await generate_question(session, request.userAnswer, request.currentNodeId)
 
     if response.nextNodes:
         session.nodes.extend(response.nextNodes)
@@ -61,7 +66,12 @@ async def answer_question(request: QuestionRequest):
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": "0.0.1"}
+    return {
+        "status": "ok",
+        "version": "0.0.3",
+        "ai_enabled": ai_service.enabled,
+        "ai_provider": ai_service.provider if ai_service.enabled else None,
+    }
 
 
 @app.post("/ocr/recognize")

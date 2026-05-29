@@ -1,11 +1,209 @@
 from models import MindNode, MindEdge, QuestionResponse, Position, NodeData
 import uuid
+from ai_service import ai_service
+
+MAX_CONSECUTIVE_ERRORS = 2
 
 
-def generate_question(session, user_answer: str, current_node_id: str) -> QuestionResponse:
-    current_step = session.current_step
+async def generate_question(session, user_answer: str, current_node_id: str) -> QuestionResponse:
 
+    if not hasattr(session, 'consecutive_errors'):
+        session.consecutive_errors = 0
+    if not hasattr(session, 'question_history'):
+        session.question_history = []
+    if not hasattr(session, 'exploration_nodes'):
+        session.exploration_nodes = []
+
+    if ai_service.enabled:
+        try:
+            return await _generate_ai_question(session, user_answer, current_node_id)
+        except Exception as e:
+            print(f"AI服务调用失败，使用默认逻辑: {e}")
+            return _generate_default_question(session, user_answer)
+    else:
+        return _generate_default_question(session, user_answer)
+
+
+async def _generate_ai_question(
+    session,
+    user_answer: str,
+    current_node_id: str,
+) -> QuestionResponse:
+    history = getattr(session, 'question_history', [])
+    total_steps = 3
+
+    question_data = await ai_service.generate_socratic_question(
+        problem=session.problem,
+        history=history,
+        current_step=session.current_step,
+        total_steps=total_steps,
+    )
+
+    correct_index = question_data.get("correct_index", 0)
+    options = question_data.get("options", ["A", "B", "C", "D"])
+    correct_letter = chr(65 + correct_index) if 0 <= correct_index < 4 else "A"
+
+    is_correct = user_answer == correct_letter
+
+    if is_correct:
+        session.consecutive_errors = 0
+        session.current_step += 1
+        next_step = session.current_step
+
+        selected_option_text = options[correct_index] if correct_index < len(options) else ""
+
+        session.question_history.append({
+            "question": question_data["question"],
+            "answer": user_answer,
+            "selected_option": selected_option_text,
+            "feedback": question_data["success_feedback"],
+            "is_correct": True,
+        })
+
+        new_node = MindNode(
+            id=f"node_{uuid.uuid4().hex[:8]}",
+            label=f"步骤{next_step}",
+            type="inference",
+            position=_calculate_position(session, is_correct=True),
+            data=NodeData(
+                content=f"✓ {selected_option_text}: {question_data['explanation']}",
+                status="active",
+            ),
+        )
+
+        response = QuestionResponse(
+            isCorrect=True,
+            feedback=question_data["success_feedback"],
+            nextQuestion=None,
+            options=None,
+            isCompleted=next_step >= total_steps,
+            nextNodes=[new_node],
+        )
+
+        last_node_id = _get_last_active_node_id(session)
+        if last_node_id:
+            response.nextEdges = [
+                MindEdge(
+                    id=f"edge_{uuid.uuid4().hex[:8]}",
+                    source=last_node_id,
+                    target=new_node.id,
+                    label="正确",
+                    style="#22c55e",
+                )
+            ]
+
+        if next_step >= total_steps:
+            solution = await ai_service.generate_final_solution(
+                session.problem, session.question_history
+            )
+            response.isCompleted = True
+            response.finalSolution = solution
+
+        return response
+    else:
+        session.consecutive_errors += 1
+
+        selected_index = ord(user_answer) - 65 if user_answer else 0
+        selected_option_text = options[selected_index] if 0 <= selected_index < len(options) else user_answer
+
+        exploration_node = MindNode(
+            id=f"node_{uuid.uuid4().hex[:8]}",
+            label="探索",
+            type="exploration",
+            position=_calculate_position(session, is_correct=False),
+            data=NodeData(
+                content=f"? {selected_option_text}: {question_data.get('explanation', '探索这条思路')}",
+                status="exploration",
+            ),
+        )
+
+        if session.consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+
+            dead_end_node = MindNode(
+                id=f"node_{uuid.uuid4().hex[:8]}",
+                label="⚠ 需要调整方向",
+                type="dead_end",
+                position=_calculate_position(session, is_correct=False, offset=50),
+                data=NodeData(
+                    content=f"这条路似乎走不通哦~\n\n{question_data['error_feedback']}\n\n让我们换个角度重新思考:",
+                    status="warning",
+                ),
+            )
+
+            session.consecutive_errors = 0
+
+            response = QuestionResponse(
+                isCorrect=False,
+                feedback=question_data["error_feedback"],
+                needsRetreat=True,
+                retreatMessage=f"看起来这个方向遇到了困难。没关系，探索错误也是学习的一部分！让我们回到正轨：",
+                nextQuestion=question_data["question"],
+                options=options,
+                nextNodes=[exploration_node, dead_end_node],
+            )
+
+            last_node_id = _get_last_active_node_id(session)
+            if last_node_id:
+                response.nextEdges = [
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=last_node_id,
+                        target=exploration_node.id,
+                        label="尝试",
+                        style="#f97316",
+                        dashed=True,
+                    ),
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=exploration_node.id,
+                        target=dead_end_node.id,
+                        label="受阻",
+                        style="#ef4444",
+                        dashed=True,
+                    ),
+                ]
+
+            return response
+        else:
+
+            hint = f"你选择了「{selected_option_text}」。\n\n{question_data['error_feedback']}\n\n继续沿着这个思路看看会怎样？"
+
+            response = QuestionResponse(
+                isCorrect=False,
+                feedback=hint,
+                nextQuestion=question_data["question"],
+                options=options,
+                nextNodes=[exploration_node],
+            )
+
+            last_node_id = _get_last_active_node_id(session)
+            if last_node_id:
+                response.nextEdges = [
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=last_node_id,
+                        target=exploration_node.id,
+                        label="探索",
+                        style="#f97316",
+                        dashed=True,
+                    )
+                ]
+
+            return response
+
+
+def _generate_default_question(
+    session,
+    user_answer: str,
+) -> QuestionResponse:
     questions = _get_questions_for_problem(session.problem)
+
+    if not hasattr(session, 'consecutive_errors'):
+        session.consecutive_errors = 0
+    if not hasattr(session, 'question_history'):
+        session.question_history = []
+
+    current_step = session.current_step
 
     if current_step >= len(questions):
         return QuestionResponse(
@@ -18,8 +216,26 @@ def generate_question(session, user_answer: str, current_node_id: str) -> Questi
     is_correct = user_answer == question_data["correct"]
 
     if is_correct:
+        session.consecutive_errors = 0
         session.current_step += 1
         next_step = session.current_step
+
+        session.question_history.append({
+            "question": question_data["question"],
+            "answer": user_answer,
+            "is_correct": True,
+        })
+
+        new_node = MindNode(
+            id=f"node_{uuid.uuid4().hex[:8]}",
+            label=f"步骤{next_step}",
+            type="inference",
+            position=_calculate_position(session, is_correct=True),
+            data=NodeData(
+                content=f"✓ {question_data['explanation']}",
+                status="active",
+            ),
+        )
 
         response = QuestionResponse(
             isCorrect=True,
@@ -27,28 +243,20 @@ def generate_question(session, user_answer: str, current_node_id: str) -> Questi
             nextQuestion=questions[next_step]["question"] if next_step < len(questions) else None,
             options=questions[next_step]["options"] if next_step < len(questions) else None,
             isCompleted=next_step >= len(questions),
+            nextNodes=[new_node],
         )
 
-        if next_step < len(questions):
-            new_node = MindNode(
-                id=f"node_{uuid.uuid4().hex[:8]}",
-                label=f"步骤{next_step + 1}",
-                type="inference",
-                position=Position(x=300 + next_step * 250, y=100),
-                data=NodeData(content=questions[next_step]["explanation"], status="active"),
-            )
-            response.nextNodes = [new_node]
-
-            last_node_id = session.nodes[-1].id if session.nodes else ""
-            if last_node_id:
-                response.nextEdges = [
-                    MindEdge(
-                        id=f"edge_{uuid.uuid4().hex[:8]}",
-                        source=last_node_id,
-                        target=new_node.id,
-                        label="推导",
-                    )
-                ]
+        last_node_id = _get_last_active_node_id(session)
+        if last_node_id:
+            response.nextEdges = [
+                MindEdge(
+                    id=f"edge_{uuid.uuid4().hex[:8]}",
+                    source=last_node_id,
+                    target=new_node.id,
+                    label="正确",
+                    style="#22c55e",
+                )
+            ]
 
         if next_step >= len(questions):
             response.isCompleted = True
@@ -56,12 +264,107 @@ def generate_question(session, user_answer: str, current_node_id: str) -> Questi
 
         return response
     else:
-        return QuestionResponse(
-            isCorrect=False,
-            feedback=question_data["error_feedback"],
-            nextQuestion=question_data["question"],
-            options=question_data["options"],
+        session.consecutive_errors += 1
+
+        exploration_node = MindNode(
+            id=f"node_{uuid.uuid4().hex[:8]}",
+            label="探索",
+            type="exploration",
+            position=_calculate_position(session, is_correct=False),
+            data=NodeData(
+                content=f"? 尝试: {user_answer}",
+                status="exploration",
+            ),
         )
+
+        if session.consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+
+            dead_end_node = MindNode(
+                id=f"node_{uuid.uuid4().hex[:8]}",
+                label="⚠ 调整方向",
+                type="dead_end",
+                position=_calculate_position(session, is_correct=False, offset=50),
+                data=NodeData(
+                    content=f"这条路走不通~\n\n{question_data['error_feedback']}\n\n让我们换个思路:",
+                    status="warning",
+                ),
+            )
+
+            session.consecutive_errors = 0
+
+            response = QuestionResponse(
+                isCorrect=False,
+                feedback=question_data["error_feedback"],
+                needsRetreat=True,
+                retreatMessage="这个方向遇到了困难。没关系，让我们重新思考！",
+                nextQuestion=question_data["question"],
+                options=question_data["options"],
+                nextNodes=[exploration_node, dead_end_node],
+            )
+
+            last_node_id = _get_last_active_node_id(session)
+            if last_node_id:
+                response.nextEdges = [
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=last_node_id,
+                        target=exploration_node.id,
+                        label="尝试",
+                        style="#f97316",
+                        dashed=True,
+                    ),
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=exploration_node.id,
+                        target=dead_end_node.id,
+                        label="受阻",
+                        style="#ef4444",
+                        dashed=True,
+                    ),
+                ]
+
+            return response
+        else:
+
+            response = QuestionResponse(
+                isCorrect=False,
+                feedback=f"你选择了 {user_answer}。{question_data['error_feedback']}\n\n继续看看？",
+                nextQuestion=question_data["question"],
+                options=question_data["options"],
+                nextNodes=[exploration_node],
+            )
+
+            last_node_id = _get_last_active_node_id(session)
+            if last_node_id:
+                response.nextEdges = [
+                    MindEdge(
+                        id=f"edge_{uuid.uuid4().hex[:8]}",
+                        source=last_node_id,
+                        target=exploration_node.id,
+                        label="探索",
+                        style="#f97316",
+                        dashed=True,
+                    )
+                ]
+
+            return response
+
+
+def _calculate_position(session, is_correct: bool, offset: int = 0) -> Position:
+    base_x = 400 + session.current_step * 250
+    if is_correct:
+        return Position(x=base_x, y=150)
+    else:
+        error_offset = session.consecutive_errors * 80 + offset
+        return Position(x=base_x + error_offset, y=300)
+
+
+def _get_last_active_node_id(session) -> str:
+    if session.nodes:
+        for node in reversed(session.nodes):
+            if node.data.status in ["active", "exploration", "warning"]:
+                return node.id
+    return session.nodes[0].id if session.nodes else ""
 
 
 def _get_questions_for_problem(problem: str) -> list[dict]:
@@ -78,9 +381,9 @@ def _get_questions_for_problem(problem: str) -> list[dict]:
                     "D. 放弃不做",
                 ],
                 "correct": "B",
-                "success_feedback": "很好!移项是解方程的重要第一步。接下来我们需要化简等式。",
-                "error_feedback": "再想想看~ 解方程时,我们通常要把含有未知数的项集中到等式的一边,这样更容易求解。",
-                "explanation": "将含有未知数的项移到等式一边,常数项移到另一边",
+                "success_feedback": "很好!移项是解方程的重要第一步。",
+                "error_feedback": "再想想看~ 解方程时需要整理等式。",
+                "explanation": "将含有未知数的项集中处理",
             },
             {
                 "question": "移项后,下一步应该做什么?",
@@ -91,106 +394,106 @@ def _get_questions_for_problem(problem: str) -> list[dict]:
                     "D. 换个题目做",
                 ],
                 "correct": "A",
-                "success_feedback": "正确!合并同类项后,等式会变得更简洁。",
-                "error_feedback": "别着急~ 移项后我们需要合并同类项,让等式变得更简单清晰。",
-                "explanation": "合并同类项,化简等式两边",
+                "success_feedback": "正确!化简让等式更清晰。",
+                "error_feedback": "别着急~ 还需要进一步整理。",
+                "explanation": "合并同类项,化简表达式",
             },
             {
-                "question": "化简后,如何求出未知数的值?",
+                "question": "化简后,如何求出未知数?",
                 "options": [
                     "A. 猜一个数字",
-                    "B. 两边同时除以未知数的系数",
+                    "B. 两边同时除以系数",
                     "C. 不用求了",
-                    "D. 随便写一个答案",
+                    "D. 随便写答案",
                 ],
                 "correct": "B",
-                "success_feedback": "太棒了!通过两边同时除以系数,就能得到未知数的值。",
-                "error_feedback": "再思考一下~ 要得到未知数的值,我们需要让未知数单独在等式一边。",
-                "explanation": "两边同时除以未知数的系数,得到最终答案",
+                "success_feedback": "太棒了!得到最终答案。",
+                "error_feedback": "再思考一下~ 需要隔离出未知数。",
+                "explanation": "求解未知数的值",
             },
         ]
     elif problem_type == "geometry":
         return [
             {
-                "question": "这道题涉及什么几何图形?它有什么特殊性质?",
+                "question": "这道题涉及什么几何图形?",
                 "options": [
                     "A. 随意猜测",
-                    "B. 识别图形,回忆相关性质和公式",
+                    "B. 识别图形和性质",
                     "C. 不管图形直接算",
                     "D. 跳过这步",
                 ],
                 "correct": "B",
-                "success_feedback": "很好!识别图形并了解其性质是解几何题的关键。",
-                "error_feedback": "想想看~ 不同的几何图形有不同的性质和公式,先认清图形很重要。",
-                "explanation": "识别题目中的几何图形,回忆相关的性质和计算公式",
+                "success_feedback": "很好!认清图形是关键。",
+                "error_feedback": "想想看~ 先要识别图形。",
+                "explanation": "识别几何图形及其性质",
             },
             {
-                "question": "确定图形后,应该选择什么公式?",
+                "question": "确定图形后,选择什么方法?",
                 "options": [
-                    "A. 随便选一个公式",
-                    "B. 根据所求量选择合适的公式",
-                    "C. 不用公式,目测",
+                    "A. 随便选公式",
+                    "B. 根据所求选择公式",
+                    "C. 不用公式目测",
                     "D. 放弃",
                 ],
                 "correct": "B",
-                "success_feedback": "正确!选择合适的公式能让解题事半功倍。",
-                "error_feedback": "别急~ 根据题目要求(求面积、周长等)选择对应的公式。",
-                "explanation": "根据题目所求,选择合适的几何公式",
+                "success_feedback": "正确!选对公式事半功倍。",
+                "error_feedback": "别急~ 要匹配题目要求。",
+                "explanation": "选择合适的解题公式",
             },
             {
-                "question": "代入数值计算时,需要注意什么?",
+                "question": "代入数值时注意什么?",
                 "options": [
-                    "A. 不用注意,直接写答案",
-                    "B. 注意单位换算和计算精度",
-                    "C. 大概估算就行",
+                    "A. 不用注意",
+                    "B. 注意单位和精度",
+                    "C. 大概估算",
                     "D. 不计算了",
                 ],
                 "correct": "B",
-                "success_feedback": "非常棒!注意单位换算和计算精度是保证答案正确的关键。",
-                "error_feedback": "再想想~ 计算时要注意单位是否统一,计算过程要仔细。",
-                "explanation": "代入已知数值,注意单位换算,仔细计算出结果",
+                "success_feedback": "非常棒!细心很重要。",
+                "error_feedback": "再想想~ 计算要注意细节。",
+                "explanation": "代入数值并计算结果",
             },
         ]
     else:
         return [
             {
-                "question": "仔细阅读题目,你认为题目最终要求的是什么?",
+                "question": "仔细阅读题目,最终要求是什么?",
                 "options": [
                     "A. 没看题目",
-                    "B. 明确题目所求,找出已知和未知的关系",
-                    "C. 随便猜一个",
+                    "B. 明确所求目标",
+                    "C. 随便猜",
                     "D. 不做了",
                 ],
                 "correct": "B",
-                "success_feedback": "很好!明确所求是解题的第一步。",
-                "error_feedback": "没关系~ 先仔细阅读题目,找出题目要求我们求什么。",
-                "explanation": "理解题意,明确已知条件和所求目标",
+                "success_feedback": "很好!明确目标是第一步。",
+                "error_feedback": "没关系~ 先理解题意。",
+                "explanation": "理解题意,明确目标",
             },
             {
-                "question": "根据题目,你打算用什么方法来解决?",
+                "question": "根据题目,打算用什么方法?",
                 "options": [
-                    "A. 不用方法,直接算",
-                    "B. 分析已知条件,选择合适的解题策略",
+                    "A. 直接算",
+                    "B. 分析条件选策略",
                     "C. 问别人",
                     "D. 放弃",
                 ],
                 "correct": "B",
-                "success_feedback": "正确!好的解题策略能让问题迎刃而解。",
-                "error_feedback": "想想看~ 根据已知条件,思考可以用哪些方法来解决这个问题。",
-                "explanation": "分析已知条件,制定解题策略",
+                "success_feedback": "正确!策略很重要。",
+                "error_feedback": "想想看~ 如何着手？",
+                "explanation": "制定解题策略",
             },
             {
-                "question": "按照策略,如何执行具体的求解过程?",
+                "question": "如何执行求解过程?",
                 "options": [
-                    "A. 跳过过程写答案",
-                    "B. 按照思路一步步计算推理",
+                    "A. 跳过过程",
+                    "B. 按步骤推理",
                     "C. 不做了",
-                    "D. 随便写写",
+                    "D. 随便写",
                 ],
                 "correct": "B",
-                "success_feedback": "太棒了!按步骤执行是得到正确答案的关键。",
-                "error_feedback": "再想想~ 按照之前制定的策略,一步步进行计算和推理。",
-                "explanation": "按照解题策略,逐步进行计算和推理",
+                "success_feedback": "太棒了!按步执行。",
+                "error_feedback": "再想想~ 要有步骤。",
+                "explanation": "逐步执行求解",
             },
         ]
 
@@ -214,20 +517,28 @@ def _generate_final_solution(problem: str) -> str:
     problem_type = _detect_problem_type(problem)
 
     if problem_type == "equation":
-        return f"完整解题思路:\n1. 分析方程: {problem}\n2. 移项,将含未知数的项移到一边\n3. 合并同类项,化简等式\n4. 求解未知数,得到最终答案\n\n记住: 解方程的关键是保持等式平衡,每一步都要在等式两边同时进行相同的操作。"
+        return f"""完整解题回顾:\n\n题目: {problem}\n\n你的思考路径已记录在左侧图中。
+\n关键步骤:
+1. 识别方程类型
+2. 移项整理
+3. 化简求解\n\n记住: 解方程的核心是保持等式平衡，每一步都要在两边进行相同操作。
+\n💡 你在探索中遇到的弯路也是宝贵的学习经验！"""
     elif problem_type == "geometry":
-        return f"完整解题思路:\n1. 识别题目中的几何图形\n2. 回忆该图形的性质和相关公式\n3. 根据所求选择合适的公式\n4. 代入已知数值进行计算\n5. 注意单位换算,得出最终结果\n\n记住: 解几何题要先认清图形,再选择合适的公式。"
+        return f"""完整解题回顾:\n\n题目: {problem}\n\n你的思考路径已记录在左侧图中。
+
+关键步骤:
+1. 识别几何图形
+2. 回忆相关公式
+3. 代入计算\n\n记住: 几何题要先认清图形特征，再选择合适的方法。
+
+💡 探索不同思路能帮你更深刻地理解问题！"""
     else:
-        return f"完整解题思路:\n1. 理解题意: {problem}\n2. 分析已知条件和所求\n3. 制定解题策略\n4. 按步骤执行求解\n5. 检查答案是否合理\n\n记住: 解题的关键是理解题意,制定清晰的解题策略。"
+        return f"""完整解题回顾:\n\n题目: {problem}\n\n你的思考路径已记录在左侧图中。
 
+关键步骤:
+1. 理解题意
+2. 分析条件
+3. 制定策略
+4. 执行求解\n\n记住: 清晰的思维路径比快速得到答案更重要。
 
-class Position:
-    def __init__(self, x: float, y: float):
-        self.x = x
-        self.y = y
-
-
-class NodeData:
-    def __init__(self, content: str, status: str = "pending"):
-        self.content = content
-        self.status = status
+💡 你的每一次思考尝试都是有价值的！"""

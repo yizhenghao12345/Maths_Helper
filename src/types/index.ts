@@ -5,13 +5,13 @@ export interface Position {
 
 export interface NodeData {
   content: string
-  status: 'pending' | 'active' | 'completed' | 'error'
+  status: 'pending' | 'active' | 'completed' | 'error' | 'exploration' | 'warning'
 }
 
 export interface MindNode {
   id: string
   label: string
-  type: 'condition' | 'inference' | 'conclusion' | 'question'
+  type: 'condition' | 'inference' | 'conclusion' | 'question' | 'exploration' | 'dead_end'
   position: Position
   data: NodeData
 }
@@ -22,6 +22,8 @@ export interface MindEdge {
   target: string
   label?: string
   animated?: boolean
+  style?: string
+  dashed?: boolean
 }
 
 export interface SubmitProblemResponse {
@@ -39,6 +41,8 @@ export interface QuestionResponse {
   options?: string[]
   isCompleted: boolean
   finalSolution?: string
+  needsRetreat?: boolean
+  retreatMessage?: string
 }
 
 export interface DeductionState {

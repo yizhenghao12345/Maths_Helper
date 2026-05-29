@@ -26,6 +26,8 @@ class MindEdge(BaseModel):
     target: str
     label: Optional[str] = None
     animated: bool = False
+    style: Optional[str] = None
+    dashed: bool = False
 
 
 class SubmitProblemRequest(BaseModel):
@@ -54,3 +56,5 @@ class QuestionResponse(BaseModel):
     options: Optional[list[str]] = None
     isCompleted: bool = False
     finalSolution: Optional[str] = None
+    needsRetreat: bool = False
+    retreatMessage: Optional[str] = None
