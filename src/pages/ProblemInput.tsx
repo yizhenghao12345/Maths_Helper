@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Upload, Image, X, Loader2 } from 'lucide-react'
 import { submitProblem, recognizeImage } from '@/api'
 import { useStore } from '@/store/useStore'
+import { useI18n } from '@/i18n/I18nContext'
 
 const ProblemInput = () => {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [problem, setProblem] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -23,7 +25,7 @@ const ProblemInput = () => {
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      setError('请选择图片文件')
+      setError(t.input.selectImageError)
       return
     }
 
@@ -47,10 +49,10 @@ const ProblemInput = () => {
       if (result.text) {
         setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
       } else {
-        setError('未识别到文字内容')
+        setError(t.input.noTextRecognized)
       }
     } catch (err) {
-      setError('图片识别失败,请重试')
+      setError(t.input.recognizeError)
     } finally {
       setIsRecognizing(false)
     }
@@ -66,7 +68,7 @@ const ProblemInput = () => {
 
   const handleSubmit = async () => {
     if (!problem.trim()) {
-      setError('请输入题目内容')
+      setError(t.input.pleaseInput)
       return
     }
 
@@ -77,15 +79,10 @@ const ProblemInput = () => {
       const response = await submitProblem(problem)
       setSessionId(response.sessionId)
       setNodesAndEdges(response.initialNodes, response.initialEdges)
-      setQuestion('观察这道题,你认为第一步应该做什么?', [
-        'A. 仔细分析已知条件',
-        'B. 直接尝试计算',
-        'C. 跳过分析',
-        'D. 不做思考',
-      ])
+      setQuestion(t.input.firstQuestion, t.input.firstOptions as [string, string, string, string])
       navigate('/deduction')
     } catch (err) {
-      setError('提交失败,请重试')
+      setError(t.input.submitError)
     } finally {
       setIsLoading(false)
     }
@@ -99,15 +96,15 @@ const ProblemInput = () => {
           className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>返回首页</span>
+          <span>{t.input.backHome}</span>
         </button>
       </header>
 
       <main className="max-w-3xl mx-auto px-8 py-12">
         <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">输入题目</h2>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">{t.input.title}</h2>
           <p className="text-gray-600 mb-8">
-            输入你要解决的数学题目,系统将为你生成思维推导图
+            {t.input.subtitle}
           </p>
 
           {imagePreview && (
@@ -115,7 +112,7 @@ const ProblemInput = () => {
               <div className="relative inline-block">
                 <img
                   src={imagePreview}
-                  alt="预览"
+                  alt={t.input.preview}
                   className="max-h-64 rounded-xl border-2 border-gray-200 object-contain"
                 />
                 <button
@@ -135,7 +132,7 @@ const ProblemInput = () => {
                 ) : (
                   <Image className="w-4 h-4" />
                 )}
-                {isRecognizing ? '识别中...' : '识别图片文字'}
+                {isRecognizing ? t.input.recognizing : t.input.recognizeImage}
               </button>
             </div>
           )}
@@ -147,7 +144,7 @@ const ProblemInput = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 <Upload className="w-4 h-4" />
-                <span>上传图片</span>
+                <span>{t.input.uploadImage}</span>
               </button>
               <input
                 ref={fileInputRef}
@@ -161,11 +158,11 @@ const ProblemInput = () => {
             <textarea
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
-              placeholder="例如: 解方程 2x + 5 = 13, 求x的值"
+              placeholder={t.input.placeholder}
               className="w-full h-40 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-700 text-lg"
             />
             <div className="text-right mt-2 text-sm text-gray-500">
-              {problem.length} 字
+              {problem.length} {t.input.charCount}
             </div>
           </div>
 
@@ -181,7 +178,7 @@ const ProblemInput = () => {
             className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             <Send className="w-5 h-5" />
-            {isLoading ? '解析中...' : '开始推演'}
+            {isLoading ? t.input.parsing : t.input.startDeduction}
           </button>
         </div>
       </main>

@@ -1,0 +1,65 @@
+export const zhCN = {
+  home: {
+    appName: '数学思维助手',
+    title: '告别"一看就懂,一做就错"',
+    subtitle: '通过可视化思维节点和互动式引导,从根源上培养数学逻辑能力',
+    startButton: '开始使用',
+    features: [
+      {
+        title: '可视化思维导图',
+        description: '将解题过程可视化展示,让你看清每一步的思考逻辑',
+      },
+      {
+        title: 'AI引导推演',
+        description: '通过苏格拉底式提问,引导你自主思考,培养解题思维',
+      },
+      {
+        title: '探索式学习',
+        description: '允许走弯路,错误时温和引导,帮助你找到正确方向',
+      },
+    ],
+  },
+  input: {
+    backHome: '返回首页',
+    title: '输入题目',
+    subtitle: '输入你要解决的数学题目,系统将为你生成思维推导图',
+    placeholder: '例如: 解方程 2x + 5 = 13, 求x的值',
+    uploadImage: '上传图片',
+    recognizeImage: '识别图片文字',
+    recognizing: '识别中...',
+    preview: '预览',
+    startDeduction: '开始推演',
+    parsing: '解析中...',
+    submitError: '提交失败,请重试',
+    pleaseInput: '请输入题目内容',
+    selectImageError: '请选择图片文件',
+    noTextRecognized: '未识别到文字内容',
+    recognizeError: '图片识别失败,请重试',
+    charCount: '字',
+    firstQuestion: '观察这道题,你认为第一步应该做什么?',
+    firstOptions: [
+      'A. 仔细分析已知条件',
+      'B. 直接尝试计算',
+      'C. 跳过分析',
+      'D. 不做思考',
+    ],
+  },
+  deduction: {
+    back: '返回',
+    title: '思维推演',
+    thinkingGuide: '思维引导',
+    followThinking: '跟着问题一步步思考',
+    solutionTitle: '完整解题思路',
+    completedTitle: '推演完成!',
+    completedDesc: '恭喜你完成了这道题的思维推演',
+    nextProblem: '继续下一题',
+    submitError: '提交失败,请重试',
+  },
+  questionPanel: {
+    successIcon: '✓',
+    warning: '⚠',
+  },
+  common: {
+    languageSwitch: 'EN',
+  },
+}

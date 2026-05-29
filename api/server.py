@@ -22,7 +22,7 @@ from question_generator import generate_question
 from ocr_service import extract_text_from_base64
 from ai_service import ai_service
 
-app = FastAPI(title="数学思维训练助手 API", version="0.0.1")
+app = FastAPI(title="Math Thinking Trainer API", version="0.0.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,7 +68,7 @@ async def answer_question(request: QuestionRequest):
 async def health_check():
     return {
         "status": "ok",
-        "version": "0.0.3",
+        "version": "0.0.4",
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
     }

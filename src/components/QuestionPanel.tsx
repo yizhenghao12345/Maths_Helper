@@ -3,9 +3,11 @@ import { CheckCircle, XCircle, ChevronRight, RefreshCw, AlertTriangle } from 'lu
 import { useNavigate } from 'react-router-dom'
 import { answerQuestion } from '@/api'
 import { useStore } from '@/store/useStore'
+import { useI18n } from '@/i18n/I18nContext'
 
 const QuestionPanel = () => {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const deduction = useStore((state) => state.deduction)
   const setQuestion = useStore((state) => state.setQuestion)
   const setFeedback = useStore((state) => state.setFeedback)
@@ -47,7 +49,7 @@ const QuestionPanel = () => {
         setQuestion(response.nextQuestion, response.options)
       }
     } catch (err) {
-      setFeedback('提交失败,请重试')
+      setFeedback(t.deduction.submitError)
     }
   }
 
@@ -61,13 +63,13 @@ const QuestionPanel = () => {
         <div className="p-6 bg-gradient-to-r from-green-500 to-emerald-500 text-white">
           <div className="flex items-center gap-3 mb-3">
             <CheckCircle className="w-8 h-8" />
-            <h3 className="text-xl font-bold">推演完成!</h3>
+            <h3 className="text-xl font-bold">{t.deduction.completedTitle}</h3>
           </div>
-          <p className="text-green-50">恭喜你完成了这道题的思维推演</p>
+          <p className="text-green-50">{t.deduction.completedDesc}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          <h4 className="font-semibold text-gray-800 mb-3">完整解题思路</h4>
+          <h4 className="font-semibold text-gray-800 mb-3">{t.deduction.solutionTitle}</h4>
           <div className="bg-gray-50 rounded-xl p-4 text-gray-700 leading-relaxed whitespace-pre-wrap">
             {deduction.finalSolution}
           </div>
@@ -79,7 +81,7 @@ const QuestionPanel = () => {
             className="w-full py-3 bg-blue-500 text-white font-semibold rounded-xl hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
           >
             <RefreshCw className="w-5 h-5" />
-            继续下一题
+            {t.deduction.nextProblem}
           </button>
         </div>
       </div>
@@ -89,8 +91,8 @@ const QuestionPanel = () => {
   return (
     <div className="w-96 bg-white border-l border-gray-200 h-full flex flex-col">
       <div className="p-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
-        <h3 className="text-lg font-bold mb-1">思维引导</h3>
-        <p className="text-blue-100 text-sm">跟着问题一步步思考</p>
+        <h3 className="text-lg font-bold mb-1">{t.deduction.thinkingGuide}</h3>
+        <p className="text-blue-100 text-sm">{t.deduction.followThinking}</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
