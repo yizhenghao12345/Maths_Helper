@@ -4,7 +4,8 @@ WORKDIR /build
 
 # 先复制依赖清单以利用层缓存
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # 复制源码并构建（产出 dist/）
 COPY . .
@@ -13,20 +14,27 @@ RUN npm run build
 # ---------- Stage 2: 运行时（nginx 托管前端 + uvicorn 跑后端）----------
 FROM python:3.11-slim AS runtime
 
+# 防止 Python 生成 .pyc 和 __pycache__，减小镜像体积
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 # nginx 反向代理 + tesseract OCR（含中文语言包）+ curl（容器健康检查用）
+# 合并为单层 + 清理 apt 缓存
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
         tesseract-ocr \
         tesseract-ocr-chi-sim \
         curl \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get purge -y --auto-remove
 
 WORKDIR /app
 
-# 安装后端依赖
+# 安装后端依赖（使用 BuildKit 缓存加速）
 COPY api/requirements.txt /app/api/requirements.txt
-RUN pip install --no-cache-dir -r /app/api/requirements.txt
+RUN --mount=type=cache,target=/root/cache/pip \
+    pip install --no-cache-dir -r /app/api/requirements.txt
 
 # 拷贝后端代码
 COPY api/ /app/api/

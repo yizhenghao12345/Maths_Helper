@@ -206,7 +206,7 @@ Math_Helper/
 | `/ocr/recognize` | POST | 上传图片，返回识别文字 |
 | `/health` | GET | 健康检查（含 AI 状态） |
 
-## 自动部署（GitHub Actions + GHCR + Docker Compose）
+## 自动部署（GitHub Actions + 腾讯云 CCR + Docker Compose）
 
 > push `dev` 或 `main` 分支即可自动构建镜像并部署到腾讯云 VPS 的对应环境。
 
@@ -217,12 +217,12 @@ Math_Helper/
         ↓  git push origin dev / main
 GitHub Actions 自动构建 Docker 镜像
         ↓
-推送到 GitHub Container Registry (GHCR)
-        ↓  SSH
-腾讯云 VPS 执行 docker compose pull && up -d
+推送到腾讯云 CCR 个人版镜像仓库（ccr.ccs.tencentyun.com）
+        ↓  Watchtower 自动检测 / SSH 手动
+腾讯云 VPS 拉取新镜像并重启容器
         ↓
-dev 环境  → http://<VPS_IP>:18080  (dev 分支)
-prod 环境 → http://<VPS_IP>:80     (main 分支)
+dev 环境  → https://maths-dev.m1in.com  (dev 分支)
+prod 环境 → https://maths.m1in.com      (main 分支)
 ```
 
 镜像内 **nginx 托管前端静态文件 + 反向代理 `/api/` 到 uvicorn:8000**（去掉 `/api` 前缀），完整复刻本地开发时 Vite 的代理行为，前后端代码零改动。
@@ -231,8 +231,8 @@ prod 环境 → http://<VPS_IP>:80     (main 分支)
 
 | 环境 | 分支 | 端口 | 镜像标签 | 容器名 | 数据目录 |
 |------|------|------|---------|--------|---------|
-| Dev  | `dev` | 18080 | `:dev` | maths-helper-dev | `/opt/app/dev/data/` |
-| Prod | `main` | 80 | `:main` | maths-helper-prod | `/opt/app/prod/data/` |
+| Dev  | `dev` | 18080 | `:dev` | maths-helper-dev | `/data/server/maths-dev/data/` |
+| Prod | `main` | 28080 | `:main` | maths-helper-prod | `/data/server/maths-prod/data/` |
 
 两个环境同机隔离，各自持有独立的 `.env`、SQLite 数据卷（持久化，重部署不丢失）。
 
@@ -240,11 +240,11 @@ prod 环境 → http://<VPS_IP>:80     (main 分支)
 
 ```bash
 # 创建双环境目录
-sudo mkdir -p /opt/app/{dev,prod}
-sudo chown -R $USER:$USER /opt/app
+sudo mkdir -p /data/server/{maths-dev,maths-prod}
+sudo chown -R $USER:$USER /data/server
 
-# 若 GHCR 镜像设为私有，需登录一次（read:packages 权限的 PAT）
-echo "你的GitHub PAT" | docker login ghcr.io -u yizhenghao12345 --password-stdin
+# 登录腾讯云 CCR（拉取镜像需要）
+echo "<YOUR_PASSWORD>" | docker login ccr.ccs.tencentyun.com -u <YOUR_USERNAME> --password-stdin
 ```
 
 > `.env` 文件无需手动创建 — GitHub Actions 部署时自动从 Secrets 生成。
@@ -259,14 +259,13 @@ echo "你的GitHub PAT" | docker login ghcr.io -u yizhenghao12345 --password-std
 | `VPS_USER` | SSH 用户 | `ubuntu` |
 | `VPS_PORT` | SSH 端口 | `22` |
 | `VPS_SSH_KEY` | SSH 私钥全文 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `VPS_APP_DIR_DEV` | dev 环境目录 | `/opt/app/dev` |
-| `VPS_APP_DIR_PROD` | prod 环境目录 | `/opt/app/prod` |
-| `AI_API_KEY` | AI 服务密钥 | `sk-...` |
-| `AI_BASE_URL` | AI 服务端点 | `https://ahbb.m1in.com/v1` |
-| `AI_MODEL` | 默认 AI 模型 | `deepseek-v4-flash` |
+| `VPS_APP_DIR_DEV` | dev 环境目录 | `/data/server/maths-dev` |
+| `VPS_APP_DIR_PROD` | prod 环境目录 | `/data/server/maths-prod` |
+| `TENCENT_REGISTRY_USERNAME` | 腾讯云 CCR 用户名 | `24220712` |
+| `TENCENT_REGISTRY_PASSWORD` | 腾讯云 CCR 密码 | （对应密码） |
 | `CONSOLE_PASSWORD` | 管理控制台密码 | 自定义强密码 |
 
-> GHCR 推送使用内置 `GITHUB_TOKEN`，无需额外 PAT。
+> AI 密钥（`AI_API_KEY`）在服务器本地 `.env` 管理，不经过 GitHub。部署 SSH 仅在配置了 `VPS_HOST` 时执行，否则依赖 Watchtower 自动更新。
 
 ### 本地验证镜像
 

@@ -8,11 +8,10 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
-  # GHCR 镜像名必须全小写
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  # 腾讯云 CCR 个人版镜像仓库
+  IMAGE_NAME: ccr.ccs.tencentyun.com/aistudy/maths_helper
 
 jobs:
   build:
@@ -23,26 +22,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Login to GHCR
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Tencent CCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Lowercase image name
-        id: image
-        run: echo "name=$(echo $IMAGE_NAME | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          registry: ccr.ccs.tencentyun.com
+          username: ${{ secrets.TENCENT_REGISTRY_USERNAME }}
+          password: ${{ secrets.TENCENT_REGISTRY_PASSWORD }}
 
       - name: Build and push image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:${{ github.ref_name }}
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+  # 仅当配置了 VPS_HOST 时才 SSH 部署；否则依赖 Watchtower 自动拉取新镜像
   deploy-dev:
     name: Deploy to Dev
     needs: build
@@ -53,7 +54,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check VPS configured
+        id: check_vps
+        run: echo "has_vps=${{ secrets.VPS_HOST != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare SSH key
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
@@ -61,6 +67,7 @@ jobs:
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Copy compose file
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -68,6 +75,7 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_DEV }}/docker-compose.yml
 
       - name: Deploy on VPS
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           ssh -p "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -91,7 +99,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check VPS configured
+        id: check_vps
+        run: echo "has_vps=${{ secrets.VPS_HOST != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare SSH key
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
@@ -99,6 +112,7 @@ jobs:
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Copy compose file
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -106,6 +120,7 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_PROD }}/docker-compose.yml
 
       - name: Deploy on VPS
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           ssh -p "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
