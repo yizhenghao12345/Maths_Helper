@@ -33,6 +33,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 problem TEXT NOT NULL,
+                language TEXT DEFAULT 'zh-CN',
                 parsed_problem TEXT,
                 current_step INTEGER DEFAULT 0,
                 nodes TEXT DEFAULT '[]',
@@ -75,18 +76,32 @@ def init_db():
                 value TEXT
             );
         """)
+        _ensure_session_columns(conn)
         conn.commit()
     finally:
         conn.close()
 
 
-def create_session(session_id: str, problem: str) -> dict:
+def _ensure_session_columns(conn: sqlite3.Connection):
+    existing_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(sessions)").fetchall()
+    }
+    required_columns = {
+        "language": "ALTER TABLE sessions ADD COLUMN language TEXT DEFAULT 'zh-CN'",
+    }
+
+    for column, ddl in required_columns.items():
+        if column not in existing_columns:
+            conn.execute(ddl)
+
+
+def create_session(session_id: str, problem: str, language: str = "zh-CN") -> dict:
     with _lock:
         conn = _get_conn()
         try:
             conn.execute(
-                "INSERT INTO sessions (id, problem) VALUES (?, ?)",
-                (session_id, problem),
+                "INSERT INTO sessions (id, problem, language) VALUES (?, ?, ?)",
+                (session_id, problem, language),
             )
             conn.commit()
             row = conn.execute(

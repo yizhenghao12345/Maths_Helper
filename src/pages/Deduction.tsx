@@ -21,7 +21,7 @@ const Deduction = () => {
         <h2 className="text-lg font-semibold text-gray-800">{t.deduction.title}</h2>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         <DeductionFlow />
         <QuestionPanel />
       </div>

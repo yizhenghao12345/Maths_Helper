@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n/I18nContext'
 
 const ProblemInput = () => {
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const [problem, setProblem] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingStage, setLoadingStage] = useState<'submitting' | 'thinking'>('submitting')
@@ -53,7 +53,7 @@ const ProblemInput = () => {
       } else {
         setError(t.input.noTextRecognized)
       }
-    } catch (err) {
+    } catch {
       setError(t.input.recognizeError)
     } finally {
       setIsRecognizing(false)
@@ -79,7 +79,7 @@ const ProblemInput = () => {
     setLoadingStage('submitting')
 
     try {
-      const response = await submitProblem(problem)
+      const response = await submitProblem(problem, undefined, language)
       setLoadingStage('thinking')
       resetDeduction()
       setSessionId(response.sessionId)
@@ -87,12 +87,12 @@ const ProblemInput = () => {
       const question = response.firstQuestion || t.input.firstQuestion
       const options = response.firstOptions || (t.input.firstOptions as string[])
       setQuestion(question, options)
-      
+
       setTimeout(() => {
         setIsLoading(false)
         navigate('/deduction')
       }, 2000)
-    } catch (err) {
+    } catch {
       setError(t.input.submitError)
       setIsLoading(false)
     }
@@ -103,6 +103,7 @@ const ProblemInput = () => {
       <header className="px-8 py-4">
         <button
           onClick={() => navigate('/')}
+          disabled={isLoading}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -162,6 +163,7 @@ const ProblemInput = () => {
                   />
                   <button
                     onClick={handleRemoveImage}
+                    disabled={isLoading || isRecognizing}
                     className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
                   >
                     <X className="w-4 h-4" />
@@ -169,7 +171,7 @@ const ProblemInput = () => {
                 </div>
                 <button
                   onClick={handleRecognize}
-                  disabled={isRecognizing}
+                  disabled={isRecognizing || isLoading}
                   className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
                   {isRecognizing ? (
@@ -186,6 +188,7 @@ const ProblemInput = () => {
               <div className="flex items-center gap-2 mb-3">
                 <button
                   onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   <Upload className="w-4 h-4" />
@@ -196,6 +199,7 @@ const ProblemInput = () => {
                   type="file"
                   accept="image/*"
                   onChange={handleImageSelect}
+                  disabled={isLoading}
                   className="hidden"
                 />
               </div>
@@ -204,6 +208,7 @@ const ProblemInput = () => {
                 value={problem}
                 onChange={(e) => setProblem(e.target.value)}
                 placeholder={t.input.placeholder}
+                disabled={isLoading}
                 className="w-full h-40 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-700 text-lg"
               />
               <div className="text-right mt-2 text-sm text-gray-500">

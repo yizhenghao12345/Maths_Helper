@@ -33,6 +33,7 @@ class MindEdge(BaseModel):
 class SubmitProblemRequest(BaseModel):
     problem: str
     problemType: Optional[str] = None
+    language: Optional[str] = "zh-CN"
 
 
 class SubmitProblemResponse(BaseModel):
@@ -47,6 +48,7 @@ class QuestionRequest(BaseModel):
     sessionId: str
     userAnswer: str
     currentNodeId: str
+    language: Optional[str] = None
 
 
 class QuestionResponse(BaseModel):

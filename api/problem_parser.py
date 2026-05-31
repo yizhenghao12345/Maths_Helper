@@ -3,17 +3,24 @@ import uuid
 from ai_service import ai_service
 
 
-async def parse_problem(problem: str) -> tuple[list[MindNode], list[MindEdge]]:
+def _get_problem_text(language: str) -> tuple[str, str]:
+    if language == "en-US":
+        return "Problem", f"Problem: {{problem}}"
+    return "题目", f"题目: {{problem}}"
+
+
+async def parse_problem(problem: str, language: str = "zh-CN") -> tuple[list[MindNode], list[MindEdge]]:
     nodes = []
     edges = []
+    title, content_template = _get_problem_text(language)
 
     nodes.append(
         MindNode(
             id=f"node_{uuid.uuid4().hex[:8]}",
-            label="题目",
+            label=title,
             type="condition",
             position=Position(x=400, y=200),
-            data=NodeData(content=f"题目: {problem}", status="active"),
+            data=NodeData(content=content_template.format(problem=problem), status="active"),
         )
     )
 

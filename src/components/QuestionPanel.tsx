@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n/I18nContext'
 
 const QuestionPanel = () => {
   const navigate = useNavigate()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const deduction = useStore((state) => state.deduction)
   const setQuestion = useStore((state) => state.setQuestion)
   const setFeedback = useStore((state) => state.setFeedback)
@@ -32,7 +32,8 @@ const QuestionPanel = () => {
       const response = await answerQuestion(
         deduction.sessionId,
         answer.charAt(0),
-        currentNodeId
+        currentNodeId,
+        language
       )
 
       setLastAnswerCorrect(response.isCorrect)
@@ -53,7 +54,7 @@ const QuestionPanel = () => {
       } else if (response.nextQuestion && response.options) {
         setQuestion(response.nextQuestion, response.options)
       }
-    } catch (err) {
+    } catch {
       setFeedback(t.deduction.submitError)
     } finally {
       setSelectedOption(null)
@@ -67,7 +68,7 @@ const QuestionPanel = () => {
 
   if (deduction.isCompleted) {
     return (
-      <div className="w-96 bg-white border-l border-gray-200 h-full flex flex-col">
+      <div className="w-96 flex-shrink-0 bg-white border-l border-gray-200 h-full flex flex-col">
         <div className="p-6 bg-gradient-to-r from-green-500 to-emerald-500 text-white">
           <div className="flex items-center gap-3 mb-3">
             <CheckCircle className="w-8 h-8" />
@@ -97,7 +98,7 @@ const QuestionPanel = () => {
   }
 
   return (
-    <div className="w-96 bg-white border-l border-gray-200 h-full flex flex-col">
+    <div className="w-96 flex-shrink-0 bg-white border-l border-gray-200 h-full flex flex-col">
       <div className="p-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
         <h3 className="text-lg font-bold mb-1">{t.deduction.thinkingGuide}</h3>
         <p className="text-blue-100 text-sm">{t.deduction.followThinking}</p>

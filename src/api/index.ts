@@ -2,12 +2,13 @@ import type { SubmitProblemResponse, QuestionResponse } from '@/types'
 
 export async function submitProblem(
   problem: string,
-  problemType?: string
+  problemType?: string,
+  language = 'zh-CN'
 ): Promise<SubmitProblemResponse> {
   const response = await fetch('/api/problem/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ problem, problemType }),
+    body: JSON.stringify({ problem, problemType, language }),
   })
 
   if (!response.ok) {
@@ -20,12 +21,13 @@ export async function submitProblem(
 export async function answerQuestion(
   sessionId: string,
   userAnswer: string,
-  currentNodeId: string
+  currentNodeId: string,
+  language = 'zh-CN'
 ): Promise<QuestionResponse> {
   const response = await fetch('/api/question/answer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, userAnswer, currentNodeId }),
+    body: JSON.stringify({ sessionId, userAnswer, currentNodeId, language }),
   })
 
   if (!response.ok) {
