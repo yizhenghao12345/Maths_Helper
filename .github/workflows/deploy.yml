@@ -43,13 +43,18 @@ jobs:
     name: Deploy to Dev
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref_name == 'dev' && secrets.VPS_HOST != ''
+    if: github.ref_name == 'dev'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check VPS configured
+        id: check_vps
+        run: echo "has_vps=${{ secrets.VPS_HOST != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare SSH key
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
@@ -57,6 +62,7 @@ jobs:
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Copy compose file
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -64,6 +70,7 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_DEV }}/docker-compose.yml
 
       - name: Deploy on VPS
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           ssh -p "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -81,13 +88,18 @@ jobs:
     name: Deploy to Prod
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref_name == 'main' && secrets.VPS_HOST != ''
+    if: github.ref_name == 'main'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check VPS configured
+        id: check_vps
+        run: echo "has_vps=${{ secrets.VPS_HOST != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Prepare SSH key
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
@@ -95,6 +107,7 @@ jobs:
           ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Copy compose file
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
@@ -102,6 +115,7 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_PROD }}/docker-compose.yml
 
       - name: Deploy on VPS
+        if: steps.check_vps.outputs.has_vps == 'true'
         run: |
           ssh -p "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
