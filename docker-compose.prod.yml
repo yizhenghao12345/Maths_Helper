@@ -1,12 +1,12 @@
 services:
   app:
-    image: ghcr.io/yizhenghao12345/maths_helper:dev
-    container_name: maths-helper-dev
+    image: ghcr.io/yizhenghao12345/maths_helper:main
+    container_name: maths-helper-prod
     restart: unless-stopped
     env_file:
       - .env
     ports:
-      - "18080:80"
+      - "80:80"
     volumes:
       # 持久化 SQLite 数据，避免重部署丢失（容器内路径见 api/db.py: api/data/）
       - ./data:/app/api/data

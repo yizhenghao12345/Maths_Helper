@@ -65,7 +65,7 @@ jobs:
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
             docker-compose.dev.yml \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR }}/docker-compose.yml
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_DEV }}/docker-compose.yml
 
       - name: Deploy on VPS
         run: |
@@ -73,7 +73,59 @@ jobs:
             -i ~/.ssh/deploy_key \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
               set -e
-              cd /opt/app/dev
+              cd "${{ secrets.VPS_APP_DIR_DEV }}"
+              # 由 GitHub Secrets 生成运行时 .env（保留 AI 降级：未配置 key 时后端仍可运行）
+              cat > .env <<ENV
+          AI_PROVIDER=openai
+          AI_API_KEY=${{ secrets.AI_API_KEY }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
+          AI_MODEL=${{ secrets.AI_MODEL }}
+          CONSOLE_PASSWORD=${{ secrets.CONSOLE_PASSWORD }}
+          ENV
+              docker compose pull
+              docker compose up -d
+              docker image prune -f
+          EOF
+
+  deploy-prod:
+    name: Deploy to Prod
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy compose file
+        run: |
+          scp -P "${{ secrets.VPS_PORT }}" \
+            -i ~/.ssh/deploy_key \
+            docker-compose.prod.yml \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_PROD }}/docker-compose.yml
+
+      - name: Deploy on VPS
+        run: |
+          ssh -p "${{ secrets.VPS_PORT }}" \
+            -i ~/.ssh/deploy_key \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+              set -e
+              cd "${{ secrets.VPS_APP_DIR_PROD }}"
+              # 由 GitHub Secrets 生成运行时 .env（保留 AI 降级：未配置 key 时后端仍可运行）
+              cat > .env <<ENV
+          AI_PROVIDER=openai
+          AI_API_KEY=${{ secrets.AI_API_KEY }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
+          AI_MODEL=${{ secrets.AI_MODEL }}
+          CONSOLE_PASSWORD=${{ secrets.CONSOLE_PASSWORD }}
+          ENV
               docker compose pull
               docker compose up -d
               docker image prune -f
