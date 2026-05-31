@@ -6,9 +6,14 @@ import {
   type Node,
   type Edge,
   MarkerType,
+  useNodesInitialized,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '@/store/useStore'
+import dagre from 'dagre'
+
+const nodeWidth = 200
+const nodeHeight = 120
 
 const nodeColors: Record<string, { bg: string; border: string; text: string; icon: string }> = {
   condition: { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af', icon: '📋' },
@@ -19,18 +24,47 @@ const nodeColors: Record<string, { bg: string; border: string; text: string; ico
   dead_end: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b', icon: '⚠️' },
 }
 
+function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({ rankdir: direction, ranksep: 120, nodesep: 60 })
+
+  nodes.forEach((node) => {
+    g.setNode(node.id, { width: nodeWidth, height: nodeHeight })
+  })
+
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target)
+  })
+
+  dagre.layout(g)
+
+  const layoutedNodes = nodes.map((node) => {
+    const nodeWithPosition = g.node(node.id)
+    return {
+      ...node,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    }
+  })
+
+  return layoutedNodes
+}
+
 const DeductionFlow = () => {
   const nodes = useStore((state) => state.deduction.nodes)
   const edges = useStore((state) => state.deduction.edges)
 
   const rfNodes: Node[] = useMemo(
-    () =>
-      nodes.map((node) => {
+    () => {
+      const baseNodes: Node[] = nodes.map((node) => {
         const colors = nodeColors[node.type] || nodeColors.condition
         return {
           id: node.id,
           type: 'default',
-          position: node.position,
+          position: { x: 0, y: 0 },
           data: {
             label: (
               <div className="text-center">
@@ -53,8 +87,25 @@ const DeductionFlow = () => {
             color: colors.text,
           },
         }
-      }),
-    [nodes]
+      })
+
+      const rfEdges: Edge[] = edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        label: edge.label,
+        animated: edge.animated,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        style: {
+          stroke: edge.style || '#94a3b8',
+          strokeWidth: 2,
+          strokeDasharray: edge.dashed ? '8 4' : 'none',
+        },
+      }))
+
+      return getLayoutedElements(baseNodes, rfEdges)
+    },
+    [nodes, edges]
   )
 
   const rfEdges: Edge[] = useMemo(

@@ -351,12 +351,13 @@ def _generate_default_question(
 
 
 def _calculate_position(session, is_correct: bool, offset: int = 0) -> Position:
-    base_x = 400 + session.current_step * 250
+    base_step = len([n for n in session.nodes if n.type in ['inference', 'exploration', 'dead_end']])
+    base_x = 400 + base_step * 250
     if is_correct:
         return Position(x=base_x, y=150)
     else:
         error_offset = session.consecutive_errors * 80 + offset
-        return Position(x=base_x + error_offset, y=300)
+        return Position(x=base_x + error_offset, y=300 + (base_step // 2) * 200)
 
 
 def _get_last_active_node_id(session) -> str:
