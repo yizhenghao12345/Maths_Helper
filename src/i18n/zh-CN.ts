@@ -54,6 +54,7 @@ export const zhCN = {
     completedDesc: '恭喜你完成了这道题的思维推演',
     nextProblem: '继续下一题',
     submitError: '提交失败,请重试',
+    analyzing: 'AI 正在分析你的回答...',
   },
   questionPanel: {
     successIcon: '✓',

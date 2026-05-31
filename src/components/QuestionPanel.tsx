@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle, XCircle, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronRight, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { answerQuestion } from '@/api'
 import { useStore } from '@/store/useStore'
@@ -17,13 +17,13 @@ const QuestionPanel = () => {
   const [lastAnswerCorrect, setLastAnswerCorrect] = useState<boolean | null>(null)
   const [needsRetreat, setNeedsRetreat] = useState(false)
   const [selectedOption, setSelectedOption] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isAnswering, setIsAnswering] = useState(false)
 
   const handleAnswer = async (answer: string) => {
-    if (!deduction.sessionId) return
+    if (!deduction.sessionId || isAnswering) return
 
     setSelectedOption(answer)
-    setIsLoading(true)
+    setIsAnswering(true)
 
     const questionNodes = deduction.nodes.filter((n) => n.type === 'question')
     const currentNodeId = questionNodes[deduction.deductionStep ?? 0]?.id ?? ''
@@ -52,15 +52,12 @@ const QuestionPanel = () => {
         setCompleted(true, response.finalSolution)
       } else if (response.nextQuestion && response.options) {
         setQuestion(response.nextQuestion, response.options)
-        setSelectedOption(null)
-        setIsLoading(false)
-      } else {
-        setIsLoading(false)
       }
     } catch (err) {
       setFeedback(t.deduction.submitError)
+    } finally {
       setSelectedOption(null)
-      setIsLoading(false)
+      setIsAnswering(false)
     }
   }
 
@@ -118,6 +115,13 @@ const QuestionPanel = () => {
           </div>
         )}
 
+        {isAnswering && (
+          <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 rounded-xl border border-blue-200">
+            <Loader2 className="w-5 h-5 text-blue-500 animate-spin flex-shrink-0" />
+            <span className="text-blue-600 text-sm">{t.deduction.analyzing}</span>
+          </div>
+        )}
+
         {deduction.currentOptions && (
           <div className="space-y-3">
             {deduction.currentOptions.map((option, index) => {
@@ -126,13 +130,13 @@ const QuestionPanel = () => {
                 <button
                   key={index}
                   onClick={() => handleAnswer(option)}
-                  disabled={isLoading}
+                  disabled={lastAnswerCorrect === true || isAnswering}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all duration-200 ${
-                    isLoading
+                    isAnswering
                       ? 'opacity-40 cursor-not-allowed border-gray-200' +
                         (isSelected ? ' ring-2 ring-blue-500 border-blue-400 opacity-70 font-bold' : '')
                       : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                  } text-gray-700`}
+                  } text-gray-700 disabled:cursor-not-allowed`}
                 >
                   {option}
                 </button>

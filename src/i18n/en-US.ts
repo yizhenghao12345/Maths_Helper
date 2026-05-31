@@ -56,6 +56,7 @@ export const enUS: typeof zhCN = {
     completedDesc: 'Congratulations on completing the thinking deduction for this problem',
     nextProblem: 'Try Another Problem',
     submitError: 'Submission failed, please retry',
+    analyzing: 'AI is analyzing your answer...',
   },
   questionPanel: {
     successIcon: '✓',
