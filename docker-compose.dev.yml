@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/yizhenghao12345/maths_helper:dev
+    image: ccr.ccs.tencentyun.com/aistudy/maths_helper:dev
     container_name: maths-helper-dev
     restart: unless-stopped
     env_file:
@@ -22,3 +22,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    labels:
+      - "com.centurylinklabs.watchtower.scope=dev"
+
+  # Watchtower：自动检测腾讯云 CCR 新镜像并重启更新
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower-dev
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 300 --cleanup --scope dev
