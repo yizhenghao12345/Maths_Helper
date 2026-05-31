@@ -47,6 +47,15 @@ PROVIDER_PRESETS = {
 }
 
 
+def _is_english(language: str) -> bool:
+    return language == "en-US"
+
+
+def _join_items(items: list[str], fallback: str) -> str:
+    values = [item for item in items if item]
+    return ", ".join(values) if values else fallback
+
+
 class AIService:
     def __init__(self):
         self.provider = os.getenv("AI_PROVIDER", "openai").lower()
@@ -264,52 +273,120 @@ class AIService:
         current_step: int,
         total_steps: int,
         parsed_problem: dict = None,
+        language: str = "zh-CN",
+        current_node_context: str = "",
         session_id: str = None,
     ) -> dict:
-        history_text = "\n".join([
-            f"Q{i+1}: {h['question']}\nA: {h['answer']}\n反馈: {h['feedback']}"
-            for i, h in enumerate(history)
-        ]) if history else "（这是第一步）"
+        english = _is_english(language)
+        history_text = "\n".join(
+            [
+                (
+                    f"Q{i+1}: {h.get('question', '')}\n"
+                    f"A: {h.get('answer', '')}\n"
+                    f"Selected option: {h.get('selected_option', '')}\n"
+                    f"Feedback: {h.get('feedback', '')}"
+                )
+                if english
+                else (
+                    f"Q{i+1}: {h.get('question', '')}\n"
+                    f"A: {h.get('answer', '')}\n"
+                    f"选择: {h.get('selected_option', '')}\n"
+                    f"反馈: {h.get('feedback', '')}"
+                )
+                for i, h in enumerate(history)
+            ]
+        ) if history else ("(This is the first step)" if english else "（这是第一步）")
 
         parsed_info = ""
         if parsed_problem:
-            parsed_info = f"""
+            if english:
+                parsed_info = f"""
+Problem analysis:
+- Problem type: {parsed_problem.get('problem_type', 'unknown')}
+- Title: {parsed_problem.get('title', 'unknown')}
+- Known conditions: {_join_items(parsed_problem.get('known_conditions', []), 'none')}
+- Goal: {parsed_problem.get('goal', 'unknown')}
+- Key concepts: {_join_items(parsed_problem.get('key_concepts', []), 'none')}
+- Suggested steps: {' -> '.join(parsed_problem.get('suggested_steps', [])) or 'none'}
+"""
+            else:
+                parsed_info = f"""
 题目分析结果：
 - 题目类型：{parsed_problem.get('problem_type', '未知')}
 - 题目标题：{parsed_problem.get('title', '未知')}
-- 已知条件：{', '.join(parsed_problem.get('known_conditions', []))}
+- 已知条件：{_join_items(parsed_problem.get('known_conditions', []), '无')}
 - 求解目标：{parsed_problem.get('goal', '未知')}
-- 涉及知识点：{', '.join(parsed_problem.get('key_concepts', []))}
-- 建议步骤：{' → '.join(parsed_problem.get('suggested_steps', []))}
+- 涉及知识点：{_join_items(parsed_problem.get('key_concepts', []), '无')}
+- 建议步骤：{' -> '.join(parsed_problem.get('suggested_steps', [])) or '无'}
 """
 
-        system_prompt = """你是一个专业的数学教育AI助手，擅长使用苏格拉底式教学法引导学生思考。
+        current_node_text = ""
+        if current_node_context:
+            current_node_text = (
+                f"\nCurrent node context:\n{current_node_context}\n"
+                if english
+                else f"\n当前节点上下文：\n{current_node_context}\n"
+            )
+
+        if english:
+            system_prompt = """You are a professional math tutor AI who guides students with the Socratic method.
+
+Your job:
+1. Generate one guidance question for the student's current step.
+2. The question must help the student decide the next move instead of revealing the answer directly.
+3. Provide 4 options (A/B/C/D). Exactly one option should be the best next step. The others should reflect common mistakes, premature calculation, or giving up.
+4. Prepare encouraging feedback for the correct choice and a gentle hint for an incorrect choice.
+5. Respond in English.
+
+Return strict JSON only:
+{
+  "question": "Guiding question",
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+  "correct_index": 0,
+  "success_feedback": "Encouraging feedback for the correct choice",
+  "error_feedback": "Gentle hint for an incorrect choice",
+  "explanation": "Short explanation for this step"
+}
+
+Requirements:
+- Make the question specific to the current step.
+- Keep options pedagogically meaningful.
+- Do not include any text outside the JSON."""
+            user_prompt = f"""Math problem: {problem}
+Current progress: step {current_step + 1} of about {total_steps}
+{parsed_info}{current_node_text}
+Conversation history:
+{history_text}
+
+Generate the Socratic question for this step."""
+        else:
+            system_prompt = """你是一个专业的数学教育AI助手，擅长使用苏格拉底式教学法引导学生思考。
 
 你的任务是：
-1. 根据学生的当前进度和回答历史，生成一个引导性的问题
-2. 问题应该帮助学生思考下一步该做什么，而不是直接给出答案
-3. 提供4个选项（A/B/C/D），其中一个是正确思路，其他是常见错误或放弃态度
-4. 对每个选项准备正确的反馈和错误时的温和提示
+1. 根据学生的当前进度和回答历史，生成一个引导性的问题。
+2. 问题应该帮助学生思考下一步该做什么，而不是直接给出答案。
+3. 提供4个选项（A/B/C/D），其中一个是当前最合理的思路，其他选项体现常见误区、过早计算或放弃态度。
+4. 对正确选项准备鼓励性反馈，对错误选项准备温和提示。
+5. 用中文回答。
 
 返回严格的JSON格式：
 {
   "question": "引导性问题",
-  "options": ["A. 正确思路选项", "B. 错误选项1", "C. 错误选项2", "D. 放弃选项"],
+  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
   "correct_index": 0,
   "success_feedback": "选择正确时的鼓励性反馈",
   "error_feedback": "选择错误时的温和提示",
-  "explanation": "这一步的解释说明"
+  "explanation": "这一步的简短说明"
 }
 
 注意：
-- 问题要具体到当前步骤，不要太笼统
-- 错误选项要反映学生常见的错误思维
-- 反馈要有启发性，帮助学生理解为什么对或错
-- 只返回JSON，不要其他文字"""
-
-        user_prompt = f"""数学题目：{problem}
+- 问题要具体到当前步骤，不要太笼统。
+- 错误选项要反映学生常见的错误思维。
+- 反馈要有启发性，帮助学生理解为什么对或错。
+- 只返回JSON，不要其他文字。"""
+            user_prompt = f"""数学题目：{problem}
 当前进度：第{current_step + 1}步（共约{total_steps}步）
-{parsed_info}
+{parsed_info}{current_node_text}
 历史对话：
 {history_text}
 
@@ -334,6 +411,21 @@ class AIService:
         except (json.JSONDecodeError, KeyError):
             pass
 
+        if english:
+            return {
+                "question": f"Step {current_step + 1}: what should we focus on next?",
+                "options": [
+                    "A. Analyze the known conditions and identify key information",
+                    "B. Build an equation or relationship from the information",
+                    "C. Review relevant formulas or theorems",
+                    "D. I am not sure and need a hint",
+                ],
+                "correct_index": 0,
+                "success_feedback": "Good choice. Keep building the reasoning step by step.",
+                "error_feedback": "Take another look at the goal and the given information.",
+                "explanation": "This step is about identifying the most useful information first.",
+            }
+
         return {
             "question": f"第{current_step + 1}步：你觉得接下来应该怎么做？",
             "options": [
@@ -344,27 +436,62 @@ class AIService:
             ],
             "correct_index": 0,
             "success_feedback": "很好！继续深入思考。",
-            "error_feedback": "再想想看~ 提示一下...",
-            "explanation": "这一步的关键在于...",
+            "error_feedback": "再想想看，先回到题目目标和已知条件。",
+            "explanation": "这一步的关键在于先找准可用信息。",
         }
 
-    async def generate_final_solution(self, problem: str, history: list[dict], session_id: str = None) -> str:
-        history_text = "\n".join([
-            f"步骤{i+1}: {h['question']} -> 回答: {h['answer']}"
-            for i, h in enumerate(history)
-        ]) if history else "无历史记录"
+    async def generate_final_solution(
+        self,
+        problem: str,
+        history: list[dict],
+        language: str = "zh-CN",
+        session_id: str = None,
+    ) -> str:
+        english = _is_english(language)
+        history_text = "\n".join(
+            [
+                (
+                    f"Step {i+1}: {h.get('question', '')} -> "
+                    f"Answer: {h.get('answer', '')} -> "
+                    f"Feedback: {h.get('feedback', '')}"
+                )
+                if english
+                else (
+                    f"步骤{i+1}: {h.get('question', '')} -> "
+                    f"回答: {h.get('answer', '')} -> "
+                    f"反馈: {h.get('feedback', '')}"
+                )
+                for i, h in enumerate(history)
+            ]
+        ) if history else ("No history recorded" if english else "无历史记录")
 
-        system_prompt = """你是一个专业的数学教育AI助手。根据学生的解题过程，给出完整的解题思路总结。
+        if english:
+            system_prompt = """You are a professional math tutor AI. Summarize the student's full reasoning path.
+
+Requirements:
+1. Present the full solution in clear steps.
+2. Comment briefly on the student's choices along the way.
+3. Summarize the key method and common pitfalls.
+4. End with encouraging study advice.
+
+Respond in friendly, clear English."""
+            user_prompt = f"""Math problem: {problem}
+
+Student reasoning history:
+{history_text}
+
+Provide a complete solution summary and learning advice."""
+        else:
+            system_prompt = """你是一个专业的数学教育AI助手。根据学生的解题过程，给出完整的解题思路总结。
 
 要求：
-1. 用清晰的步骤展示完整解题过程
-2. 结合学生在每一步的回答进行点评
-3. 总结解题的关键方法和注意事项
-4. 鼓励学生继续保持良好的思维习惯
+1. 用清晰的步骤展示完整解题过程。
+2. 结合学生在每一步的回答进行点评。
+3. 总结解题的关键方法和注意事项。
+4. 鼓励学生继续保持良好的思维习惯。
 
 用中文回答，语言亲切易懂。"""
-
-        user_prompt = f"""数学题目：{problem}
+            user_prompt = f"""数学题目：{problem}
 
 学生的推演过程：
 {history_text}

@@ -8,9 +8,10 @@ SESSION_TIMEOUT = 30 * 60
 
 
 class Session:
-    def __init__(self, session_id: str, problem: str):
+    def __init__(self, session_id: str, problem: str, language: str = "zh-CN"):
         self.session_id = session_id
         self.problem = problem
+        self.language = language
         self.parsed_problem = None
         self.current_step = 0
         self.nodes = []
@@ -33,6 +34,7 @@ class Session:
         db.update_session(
             self.session_id,
             problem=self.problem,
+            language=self.language,
             parsed_problem=self.parsed_problem,
             current_step=self.current_step,
             nodes=self.nodes,
@@ -43,14 +45,14 @@ class Session:
 
     @classmethod
     def from_db(cls, data: dict) -> "Session":
-        session = cls(data["id"], data["problem"])
+        session = cls(data["id"], data["problem"], data.get("language", "zh-CN"))
         session.parsed_problem = data.get("parsed_problem")
         session.current_step = data.get("current_step", 0)
         session.nodes = data.get("nodes", [])
         session.edges = data.get("edges", [])
         session.is_completed = data.get("is_completed", False)
         session.consecutive_errors = data.get("consecutive_errors", 0)
-        session.question_history = []
+        session.question_history = _load_question_history(data["id"])
         session.exploration_nodes = []
         return session
 
@@ -59,9 +61,9 @@ class SessionStore:
     def __init__(self):
         self.sessions: dict[str, Session] = {}
 
-    def create_session(self, session_id: str, problem: str) -> Session:
-        db.create_session(session_id, problem)
-        session = Session(session_id, problem)
+    def create_session(self, session_id: str, problem: str, language: str = "zh-CN") -> Session:
+        db.create_session(session_id, problem, language)
+        session = Session(session_id, problem, language)
         self.sessions[session_id] = session
         return session
 
@@ -103,3 +105,17 @@ class SessionStore:
 
 
 session_store = SessionStore()
+
+
+def _load_question_history(session_id: str) -> list[dict]:
+    rows = db.get_question_history(session_id)
+    return [
+        {
+            "question": row.get("question", ""),
+            "answer": row.get("answer", ""),
+            "selected_option": row.get("selected_option", ""),
+            "feedback": row.get("feedback", ""),
+            "is_correct": bool(row.get("is_correct", False)),
+        }
+        for row in rows
+    ]

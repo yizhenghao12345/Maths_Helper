@@ -30,6 +30,8 @@ export const zhCN = {
     preview: '预览',
     startDeduction: '开始推演',
     parsing: '解析中...',
+    loadingTitle: '正在生成思维推演',
+    loadingDesc: '系统正在分析题目并整理第一步思路, 请稍候...',
     submitError: '提交失败,请重试',
     pleaseInput: '请输入题目内容',
     selectImageError: '请选择图片文件',

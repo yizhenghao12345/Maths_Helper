@@ -32,6 +32,8 @@ export const enUS: typeof zhCN = {
     preview: 'Preview',
     startDeduction: 'Start Deduction',
     parsing: 'Parsing...',
+    loadingTitle: 'Generating Thinking Deduction',
+    loadingDesc: 'The system is analyzing the problem and preparing the first thinking step. Please wait...',
     submitError: 'Submission failed, please retry',
     pleaseInput: 'Please enter the problem content',
     selectImageError: 'Please select an image file',
