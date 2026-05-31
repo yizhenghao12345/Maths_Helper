@@ -21,6 +21,9 @@ from problem_parser import parse_problem
 from question_generator import generate_question
 from ocr_service import extract_text_from_base64
 from ai_service import ai_service
+from console_routes import router as console_router
+import db
+
 
 app = FastAPI(title="Math Thinking Trainer API", version="0.0.4")
 
@@ -31,6 +34,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(console_router)
+
+
+@app.on_event("startup")
+async def startup():
+    db.init_db()
 
 
 @app.post("/problem/submit", response_model=SubmitProblemResponse)
@@ -43,8 +53,47 @@ async def submit_problem(request: SubmitProblemRequest):
     session.nodes = nodes
     session.edges = edges
 
+    first_question = None
+    first_options = None
+
+    if ai_service.enabled:
+        try:
+            parsed = await ai_service.parse_problem(request.problem, session_id=session_id)
+            session.parsed_problem = parsed
+        except Exception as e:
+            print(f"AI解析题目失败: {e}")
+
+        try:
+            question_data = await ai_service.generate_socratic_question(
+                problem=request.problem,
+                history=[],
+                current_step=0,
+                total_steps=3,
+                parsed_problem=session.parsed_problem,
+                session_id=session_id,
+            )
+            first_question = question_data.get("question")
+            first_options = question_data.get("options")
+        except Exception as e:
+            print(f"AI生成首问失败，使用默认问题: {e}")
+
+    if not first_question:
+        first_question = "观察这道题，你认为第一步应该做什么?"
+        first_options = [
+            "A. 仔细分析已知条件",
+            "B. 直接尝试计算",
+            "C. 跳过分析",
+            "D. 不做思考",
+        ]
+
+    session.save()
+
     return SubmitProblemResponse(
-        sessionId=session_id, initialNodes=nodes, initialEdges=edges
+        sessionId=session_id,
+        initialNodes=nodes,
+        initialEdges=edges,
+        firstQuestion=first_question,
+        firstOptions=first_options,
     )
 
 
@@ -60,6 +109,20 @@ async def answer_question(request: QuestionRequest):
         session.nodes.extend(response.nextNodes)
     if response.nextEdges:
         session.edges.extend(response.nextEdges)
+
+    if hasattr(session, 'question_history') and session.question_history:
+        latest = session.question_history[-1]
+        db.add_question_history(
+            session_id=session.session_id,
+            question=latest.get("question", ""),
+            answer=latest.get("answer", ""),
+            selected_option=latest.get("selected_option", ""),
+            feedback=latest.get("feedback", ""),
+            is_correct=latest.get("is_correct", False),
+            step=session.current_step,
+        )
+
+    session.save()
 
     return response
 

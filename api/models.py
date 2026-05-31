@@ -39,6 +39,8 @@ class SubmitProblemResponse(BaseModel):
     sessionId: str
     initialNodes: list[MindNode]
     initialEdges: list[MindEdge]
+    firstQuestion: Optional[str] = None
+    firstOptions: Optional[list[str]] = None
 
 
 class QuestionRequest(BaseModel):

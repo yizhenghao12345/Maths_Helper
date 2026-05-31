@@ -79,7 +79,9 @@ const ProblemInput = () => {
       const response = await submitProblem(problem)
       setSessionId(response.sessionId)
       setNodesAndEdges(response.initialNodes, response.initialEdges)
-      setQuestion(t.input.firstQuestion, t.input.firstOptions as [string, string, string, string])
+      const question = response.firstQuestion || t.input.firstQuestion
+      const options = response.firstOptions || (t.input.firstOptions as string[])
+      setQuestion(question, options)
       navigate('/deduction')
     } catch (err) {
       setError(t.input.submitError)

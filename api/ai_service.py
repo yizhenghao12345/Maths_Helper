@@ -1,7 +1,50 @@
 import os
 import json
+import time
 import httpx
 from typing import Optional
+
+import db
+
+
+def mask_api_key(key: str) -> str:
+    if not key or len(key) <= 8:
+        return "***" if key else ""
+    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+
+PROVIDER_PRESETS = {
+    "openai": {
+        "name": "OpenAI",
+        "base_url": "https://api.openai.com/v1",
+        "models": ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo"],
+    },
+    "qwen": {
+        "name": "通义千问 (Qwen)",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "models": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
+    },
+    "baidu": {
+        "name": "百度文心 (Baidu)",
+        "base_url": "https://aip.baidubce.com",
+        "models": ["ernie-bot-4", "ernie-bot-turbo", "ernie-bot"],
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "base_url": "https://api.deepseek.com/v1",
+        "models": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+    },
+    "zhipu": {
+        "name": "智谱AI (GLM)",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "models": ["glm-4-plus", "glm-4", "glm-4-flash", "glm-3-turbo"],
+    },
+    "custom": {
+        "name": "自定义 (Custom)",
+        "base_url": "",
+        "models": [],
+    },
+}
 
 
 class AIService:
@@ -12,26 +55,101 @@ class AIService:
         self.model = os.getenv("AI_MODEL", "gpt-3.5-turbo")
         self.enabled = bool(self.api_key)
 
+    async def test_connection(self, provider: str, api_key: str, base_url: str, model: str) -> dict:
+        try:
+            messages = [{"role": "user", "content": "Hi"}]
+            if provider == "baidu":
+                url = f"{base_url}/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions"
+                params = {"access_token": api_key}
+                payload = {
+                    "messages": messages,
+                    "max_output_tokens": 5,
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(url, params=params, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    preview = data.get("result", "")[:100]
+            else:
+                url = f"{base_url}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "max_tokens": 5,
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    preview = data["choices"][0]["message"]["content"][:100]
+            return {"success": True, "message": "连接成功", "response_preview": preview}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def get_full_config(self) -> dict:
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "api_key_masked": mask_api_key(self.api_key),
+            "base_url": self.base_url,
+            "enabled": self.enabled,
+            "provider_presets": PROVIDER_PRESETS,
+        }
+
     async def chat_completion(
         self,
         messages: list[dict],
         temperature: float = 0.7,
         max_tokens: int = 2000,
+        method: str = "unknown",
+        session_id: str = None,
     ) -> str:
         if not self.enabled:
             raise ValueError("AI服务未配置,请设置 AI_API_KEY 环境变量")
 
+        request_summary = json.dumps(messages, ensure_ascii=False)[:200]
+        start_time = time.time()
+        success = True
+        error_message = None
+        result = ""
+
         try:
             if self.provider == "openai":
-                return await self._call_openai(messages, temperature, max_tokens)
+                result = await self._call_openai(messages, temperature, max_tokens)
             elif self.provider == "qwen":
-                return await self._call_qwen(messages, temperature, max_tokens)
+                result = await self._call_qwen(messages, temperature, max_tokens)
             elif self.provider == "baidu":
-                return await self._call_baidu(messages, temperature, max_tokens)
+                result = await self._call_baidu(messages, temperature, max_tokens)
             else:
-                return await self._call_openai(messages, temperature, max_tokens)
+                result = await self._call_openai(messages, temperature, max_tokens)
+            return result
         except Exception as e:
+            success = False
+            error_message = str(e)[:500]
             raise Exception(f"AI服务调用失败: {str(e)}")
+        finally:
+            duration_ms = int((time.time() - start_time) * 1000)
+            response_summary = result[:200] if result else ""
+            if not success:
+                response_summary = ""
+            try:
+                db.add_ai_log(
+                    session_id=session_id,
+                    provider=self.provider,
+                    model=self.model,
+                    method=method,
+                    request_summary=request_summary,
+                    response_summary=response_summary,
+                    duration_ms=duration_ms,
+                    success=success,
+                    error_message=error_message,
+                )
+            except Exception:
+                pass
 
     async def _call_openai(self, messages, temperature, max_tokens) -> str:
         url = f"{self.base_url or 'https://api.openai.com/v1'}/chat/completions"
@@ -88,7 +206,7 @@ class AIService:
             data = response.json()
             return data.get("result", "")
 
-    async def parse_problem(self, problem: str) -> dict:
+    async def parse_problem(self, problem: str, session_id: str = None) -> dict:
         system_prompt = """你是一个专业的数学教育AI助手。你的任务是分析学生提交的数学题目，并返回结构化的JSON数据。
 
 请分析以下数学题目，返回JSON格式数据：
@@ -111,6 +229,8 @@ class AIService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
+            method="parse_problem",
+            session_id=session_id,
         )
 
         try:
@@ -143,11 +263,25 @@ class AIService:
         history: list[dict],
         current_step: int,
         total_steps: int,
+        parsed_problem: dict = None,
+        session_id: str = None,
     ) -> dict:
         history_text = "\n".join([
             f"Q{i+1}: {h['question']}\nA: {h['answer']}\n反馈: {h['feedback']}"
             for i, h in enumerate(history)
         ]) if history else "（这是第一步）"
+
+        parsed_info = ""
+        if parsed_problem:
+            parsed_info = f"""
+题目分析结果：
+- 题目类型：{parsed_problem.get('problem_type', '未知')}
+- 题目标题：{parsed_problem.get('title', '未知')}
+- 已知条件：{', '.join(parsed_problem.get('known_conditions', []))}
+- 求解目标：{parsed_problem.get('goal', '未知')}
+- 涉及知识点：{', '.join(parsed_problem.get('key_concepts', []))}
+- 建议步骤：{' → '.join(parsed_problem.get('suggested_steps', []))}
+"""
 
         system_prompt = """你是一个专业的数学教育AI助手，擅长使用苏格拉底式教学法引导学生思考。
 
@@ -175,7 +309,7 @@ class AIService:
 
         user_prompt = f"""数学题目：{problem}
 当前进度：第{current_step + 1}步（共约{total_steps}步）
-
+{parsed_info}
 历史对话：
 {history_text}
 
@@ -187,6 +321,8 @@ class AIService:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.8,
+            method="generate_socratic_question",
+            session_id=session_id,
         )
 
         try:
@@ -212,7 +348,7 @@ class AIService:
             "explanation": "这一步的关键在于...",
         }
 
-    async def generate_final_solution(self, problem: str, history: list[dict]) -> str:
+    async def generate_final_solution(self, problem: str, history: list[dict], session_id: str = None) -> str:
         history_text = "\n".join([
             f"步骤{i+1}: {h['question']} -> 回答: {h['answer']}"
             for i, h in enumerate(history)
@@ -242,6 +378,8 @@ class AIService:
             ],
             temperature=0.7,
             max_tokens=1500,
+            method="generate_final_solution",
+            session_id=session_id,
         )
 
 

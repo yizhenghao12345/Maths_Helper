@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -7,6 +7,7 @@ import {
   type Edge,
   MarkerType,
   useNodesInitialized,
+  useReactFlow,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '@/store/useStore'
@@ -51,6 +52,22 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction = 'LR') {
   })
 
   return layoutedNodes
+}
+
+const FitViewUpdater = () => {
+  const nodes = useStore((state) => state.deduction.nodes)
+  const { fitView } = useReactFlow()
+  const nodesInitialized = useNodesInitialized()
+
+  useEffect(() => {
+    if (nodesInitialized && nodes.length > 0) {
+      requestAnimationFrame(() => {
+        fitView({ padding: 0.2, duration: 300 })
+      })
+    }
+  }, [nodesInitialized, nodes.length, fitView])
+
+  return null
 }
 
 const DeductionFlow = () => {
@@ -139,6 +156,7 @@ const DeductionFlow = () => {
         fitView
         fitViewOptions={{ padding: 0.2 }}
       >
+        <FitViewUpdater />
         <Background color="#e2e8f0" gap={20} />
         <Controls />
       </ReactFlow>

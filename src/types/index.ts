@@ -30,6 +30,8 @@ export interface SubmitProblemResponse {
   sessionId: string
   initialNodes: MindNode[]
   initialEdges: MindEdge[]
+  firstQuestion?: string
+  firstOptions?: string[]
 }
 
 export interface QuestionResponse {

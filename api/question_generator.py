@@ -37,6 +37,8 @@ async def _generate_ai_question(
         history=history,
         current_step=session.current_step,
         total_steps=total_steps,
+        parsed_problem=getattr(session, 'parsed_problem', None),
+        session_id=session.session_id,
     )
 
     correct_index = question_data.get("correct_index", 0)
@@ -94,7 +96,7 @@ async def _generate_ai_question(
 
         if next_step >= total_steps:
             solution = await ai_service.generate_final_solution(
-                session.problem, session.question_history
+                session.problem, session.question_history, session_id=session.session_id
             )
             response.isCompleted = True
             response.finalSolution = solution
