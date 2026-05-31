@@ -36,6 +36,9 @@ export const zhCN = {
     noTextRecognized: '未识别到文字内容',
     recognizeError: '图片识别失败,请重试',
     charCount: '字',
+    submitting: '题目提交中...',
+    aiThinking: 'AI正在思考问题...',
+    aiThinkingSub: '正在分析题目并生成引导问题',
     firstQuestion: '观察这道题,你认为第一步应该做什么?',
     firstOptions: [
       'A. 仔细分析已知条件',
