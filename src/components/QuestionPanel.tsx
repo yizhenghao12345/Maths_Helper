@@ -130,7 +130,7 @@ const QuestionPanel = () => {
                 <button
                   key={index}
                   onClick={() => handleAnswer(option)}
-                  disabled={lastAnswerCorrect === true || isAnswering}
+                  disabled={isAnswering}
                   className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all duration-200 ${
                     isAnswering
                       ? 'opacity-40 cursor-not-allowed border-gray-200' +

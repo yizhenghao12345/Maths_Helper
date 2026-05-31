@@ -3,6 +3,13 @@ import json
 import os
 import threading
 from typing import Optional
+from pydantic import BaseModel
+
+
+def _json_serial(obj):
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "maths_helper.db")
@@ -117,7 +124,7 @@ def update_session(session_id: str, **kwargs):
             for key, value in kwargs.items():
                 if key in ("nodes", "edges", "parsed_problem"):
                     sets.append(f"{key} = ?")
-                    vals.append(json.dumps(value) if value is not None else None)
+                    vals.append(json.dumps(value, default=_json_serial) if value is not None else None)
                 elif key == "is_completed":
                     sets.append(f"{key} = ?")
                     vals.append(1 if value else 0)

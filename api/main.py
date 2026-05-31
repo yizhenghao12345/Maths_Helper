@@ -12,7 +12,8 @@ from models import (
 )
 from session_store import session_store
 from problem_parser import parse_problem
-from question_generator import generate_question
+from question_generator import generate_question, _get_questions_for_problem
+from ai_service import ai_service
 from console_routes import router as console_router
 import db
 
@@ -47,15 +48,43 @@ app.include_router(console_router)
 async def submit_problem(request: SubmitProblemRequest):
     session_id = f"session_{uuid.uuid4().hex[:8]}"
 
-    nodes, edges = parse_problem(request.problem)
+    nodes, edges = await parse_problem(request.problem)
 
     session = session_store.create_session(session_id, request.problem)
     session.nodes = nodes
     session.edges = edges
     session.save()
 
+    first_question = None
+    first_options = None
+
+    if ai_service.enabled:
+        try:
+            question_data = await ai_service.generate_socratic_question(
+                problem=request.problem,
+                history=[],
+                current_step=0,
+                total_steps=3,
+                parsed_problem=getattr(session, 'parsed_problem', None),
+                session_id=session_id,
+            )
+            first_question = question_data.get("question")
+            first_options = question_data.get("options")
+        except Exception as e:
+            print(f"AI生成首题失败，使用默认逻辑: {e}")
+
+    if not first_question:
+        default_questions = _get_questions_for_problem(request.problem)
+        if default_questions:
+            first_question = default_questions[0]["question"]
+            first_options = default_questions[0]["options"]
+
     return SubmitProblemResponse(
-        sessionId=session_id, initialNodes=nodes, initialEdges=edges
+        sessionId=session_id,
+        initialNodes=nodes,
+        initialEdges=edges,
+        firstQuestion=first_question,
+        firstOptions=first_options,
     )
 
 

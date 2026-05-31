@@ -19,6 +19,7 @@ const ProblemInput = () => {
   const setSessionId = useStore((state) => state.setSessionId)
   const setNodesAndEdges = useStore((state) => state.setNodesAndEdges)
   const setQuestion = useStore((state) => state.setQuestion)
+  const resetDeduction = useStore((state) => state.resetDeduction)
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -77,6 +78,7 @@ const ProblemInput = () => {
 
     try {
       const response = await submitProblem(problem)
+      resetDeduction()
       setSessionId(response.sessionId)
       setNodesAndEdges(response.initialNodes, response.initialEdges)
       const question = response.firstQuestion || t.input.firstQuestion
