@@ -38,6 +38,9 @@ export const enUS: typeof zhCN = {
     noTextRecognized: 'No text content recognized',
     recognizeError: 'Image recognition failed, please retry',
     charCount: 'chars',
+    submitting: 'Submitting problem...',
+    aiThinking: 'AI is thinking...',
+    aiThinkingSub: 'Analyzing the problem and generating guided questions',
     firstQuestion: 'Looking at this problem, what do you think the first step should be?',
     firstOptions: [
       'A. Carefully analyze the known conditions',

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Upload, Image, X, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Image, X, Loader2, Sparkles } from 'lucide-react'
 import { submitProblem, recognizeImage } from '@/api'
 import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
@@ -10,6 +10,7 @@ const ProblemInput = () => {
   const { t } = useI18n()
   const [problem, setProblem] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingStage, setLoadingStage] = useState<'submitting' | 'thinking'>('submitting')
   const [error, setError] = useState('')
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -75,19 +76,24 @@ const ProblemInput = () => {
 
     setIsLoading(true)
     setError('')
+    setLoadingStage('submitting')
 
     try {
       const response = await submitProblem(problem)
+      setLoadingStage('thinking')
       resetDeduction()
       setSessionId(response.sessionId)
       setNodesAndEdges(response.initialNodes, response.initialEdges)
       const question = response.firstQuestion || t.input.firstQuestion
       const options = response.firstOptions || (t.input.firstOptions as string[])
       setQuestion(question, options)
-      navigate('/deduction')
+      
+      setTimeout(() => {
+        setIsLoading(false)
+        navigate('/deduction')
+      }, 2000)
     } catch (err) {
       setError(t.input.submitError)
-    } finally {
       setIsLoading(false)
     }
   }
@@ -105,86 +111,122 @@ const ProblemInput = () => {
       </header>
 
       <main className="max-w-3xl mx-auto px-8 py-12">
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">{t.input.title}</h2>
-          <p className="text-gray-600 mb-8">
-            {t.input.subtitle}
-          </p>
-
-          {imagePreview && (
-            <div className="mb-6 relative">
-              <div className="relative inline-block">
-                <img
-                  src={imagePreview}
-                  alt={t.input.preview}
-                  className="max-h-64 rounded-xl border-2 border-gray-200 object-contain"
-                />
-                <button
-                  onClick={handleRemoveImage}
-                  className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <button
-                onClick={handleRecognize}
-                disabled={isRecognizing}
-                className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
-              >
-                {isRecognizing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Image className="w-4 h-4" />
-                )}
-                {isRecognizing ? t.input.recognizing : t.input.recognizeImage}
-              </button>
-            </div>
-          )}
-
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <Upload className="w-4 h-4" />
-                <span>{t.input.uploadImage}</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-            </div>
-
-            <textarea
-              value={problem}
-              onChange={(e) => setProblem(e.target.value)}
-              placeholder={t.input.placeholder}
-              className="w-full h-40 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-700 text-lg"
-            />
-            <div className="text-right mt-2 text-sm text-gray-500">
-              {problem.length} {t.input.charCount}
+        {isLoading ? (
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              {loadingStage === 'submitting' ? (
+                <>
+                  <div className="mb-8 relative">
+                    <div className="w-20 h-20 bg-gradient-to-br from-blue-400 to-cyan-400 rounded-full flex items-center justify-center animate-pulse">
+                      <Send className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute inset-0 w-20 h-20 bg-blue-300 rounded-full animate-ping opacity-20" />
+                  </div>
+                  <p className="text-gray-600 font-semibold text-xl mb-3">{t.input.submitting}</p>
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">{t.deduction.analyzing}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-8 relative">
+                    <div className="w-20 h-20 bg-gradient-to-br from-purple-400 to-pink-400 rounded-full flex items-center justify-center animate-pulse">
+                      <Sparkles className="w-10 h-10 text-white" />
+                    </div>
+                    <div className="absolute inset-0 w-20 h-20 bg-purple-300 rounded-full animate-ping opacity-20" />
+                  </div>
+                  <p className="text-gray-600 font-semibold text-xl mb-3">{t.input.aiThinking}</p>
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">{t.input.aiThinkingSub}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-lg p-8">
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">{t.input.title}</h2>
+            <p className="text-gray-600 mb-8">
+              {t.input.subtitle}
+            </p>
 
-          {error && (
-            <div className="mb-4 px-4 py-3 bg-red-50 text-red-600 rounded-lg">
-              {error}
+            {imagePreview && (
+              <div className="mb-6 relative">
+                <div className="relative inline-block">
+                  <img
+                    src={imagePreview}
+                    alt={t.input.preview}
+                    className="max-h-64 rounded-xl border-2 border-gray-200 object-contain"
+                  />
+                  <button
+                    onClick={handleRemoveImage}
+                    className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-md"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={handleRecognize}
+                  disabled={isRecognizing}
+                  className="ml-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isRecognizing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Image className="w-4 h-4" />
+                  )}
+                  {isRecognizing ? t.input.recognizing : t.input.recognizeImage}
+                </button>
+              </div>
+            )}
+
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>{t.input.uploadImage}</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+              </div>
+
+              <textarea
+                value={problem}
+                onChange={(e) => setProblem(e.target.value)}
+                placeholder={t.input.placeholder}
+                className="w-full h-40 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-700 text-lg"
+              />
+              <div className="text-right mt-2 text-sm text-gray-500">
+                {problem.length} {t.input.charCount}
+              </div>
             </div>
-          )}
 
-          <button
-            onClick={handleSubmit}
-            disabled={isLoading}
-            className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            <Send className="w-5 h-5" />
-            {isLoading ? t.input.parsing : t.input.startDeduction}
-          </button>
-        </div>
+            {error && (
+              <div className="mb-4 px-4 py-3 bg-red-50 text-red-600 rounded-lg">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className="w-full py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-lg font-semibold rounded-xl shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Send className="w-5 h-5" />
+              {t.input.startDeduction}
+            </button>
+          </div>
+        )}
       </main>
     </div>
   )

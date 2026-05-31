@@ -1,4 +1,4 @@
-itimport sys
+import sys
 sys.path.append('.')
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
@@ -29,7 +29,7 @@ app = FastAPI(title="Math Thinking Trainer API", version="0.0.4")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:545"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
