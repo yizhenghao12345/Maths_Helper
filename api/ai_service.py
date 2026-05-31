@@ -32,7 +32,7 @@ PROVIDER_PRESETS = {
     "deepseek": {
         "name": "DeepSeek",
         "base_url": "https://api.deepseek.com/v1",
-        "models": ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
+        "models": ["deepseek-v4-flash", "deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
     },
     "zhipu": {
         "name": "智谱AI (GLM)",
@@ -58,10 +58,10 @@ def _join_items(items: list[str], fallback: str) -> str:
 
 class AIService:
     def __init__(self):
-        self.provider = os.getenv("AI_PROVIDER", "openai").lower()
+        self.provider = os.getenv("AI_PROVIDER", "deepseek").lower()
         self.api_key = os.getenv("AI_API_KEY", "")
-        self.base_url = os.getenv("AI_BASE_URL", "")
-        self.model = os.getenv("AI_MODEL", "gpt-3.5-turbo")
+        self.base_url = os.getenv("AI_BASE_URL", "https://api.deepseek.com/v1")
+        self.model = os.getenv("AI_MODEL", "deepseek-v4-flash")
         self.enabled = bool(self.api_key)
 
     async def test_connection(self, provider: str, api_key: str, base_url: str, model: str) -> dict:

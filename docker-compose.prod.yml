@@ -5,6 +5,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # 默认值：DeepSeek v4 Flash（免费额度），仅需在 .env 中配置 AI_API_KEY 即可
+      AI_PROVIDER: deepseek
+      AI_BASE_URL: https://api.deepseek.com/v1
+      AI_MODEL: deepseek-v4-flash
     ports:
       - "80:80"
     volumes:

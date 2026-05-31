@@ -74,14 +74,8 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
               set -e
               cd "${{ secrets.VPS_APP_DIR_DEV }}"
-              # 由 GitHub Secrets 生成运行时 .env（保留 AI 降级：未配置 key 时后端仍可运行）
-              cat > .env <<ENV
-          AI_PROVIDER=openai
-          AI_API_KEY=${{ secrets.AI_API_KEY }}
-          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
-          AI_MODEL=${{ secrets.AI_MODEL }}
-          CONSOLE_PASSWORD=${{ secrets.CONSOLE_PASSWORD }}
-          ENV
+              # AI 密钥等配置改为在服务器本地 .env 维护，部署不再覆盖；缺失时仅创建空文件占位（保留 AI 降级）
+              [ -f .env ] || touch .env
               docker compose pull
               docker compose up -d
               docker image prune -f
@@ -118,14 +112,8 @@ jobs:
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
               set -e
               cd "${{ secrets.VPS_APP_DIR_PROD }}"
-              # 由 GitHub Secrets 生成运行时 .env（保留 AI 降级：未配置 key 时后端仍可运行）
-              cat > .env <<ENV
-          AI_PROVIDER=openai
-          AI_API_KEY=${{ secrets.AI_API_KEY }}
-          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
-          AI_MODEL=${{ secrets.AI_MODEL }}
-          CONSOLE_PASSWORD=${{ secrets.CONSOLE_PASSWORD }}
-          ENV
+              # AI 密钥等配置改为在服务器本地 .env 维护，部署不再覆盖；缺失时仅创建空文件占位（保留 AI 降级）
+              [ -f .env ] || touch .env
               docker compose pull
               docker compose up -d
               docker image prune -f

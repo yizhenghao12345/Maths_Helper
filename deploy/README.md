@@ -7,12 +7,12 @@
 ```
 /opt/app/
 ├── dev/                  # dev 环境
-│   ├── docker-compose.yml   # ← docker-compose.dev.yml
-│   ├── .env                 # ← 由 GitHub Actions 自动生成
+│   ├── docker-compose.yml   # ← docker-compose.dev.yml（由 GitHub Actions 自动上传）
+│   ├── .env                 # ← 服务器本地维护，包含 AI 密钥等敏感配置
 │   └── data/                # SQLite 持久化（自动创建）
 └── prod/                 # prod 环境
-    ├── docker-compose.yml   # ← docker-compose.prod.yml
-    ├── .env                 # ← 由 GitHub Actions 自动生成
+    ├── docker-compose.yml   # ← docker-compose.prod.yml（由 GitHub Actions 自动上传）
+    ├── .env                 # ← 服务器本地维护，包含 AI 密钥等敏感配置
     └── data/                # SQLite 持久化（自动创建）
 ```
 
@@ -38,9 +38,43 @@ sudo usermod -aG docker $USER
 echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u <GITHUB_USERNAME> --password-stdin
 ```
 
+## 配置 AI 密钥（在服务器上操作）
+
+`docker-compose.yml` 中已内置 DeepSeek v4 Flash 默认配置（provider、base_url、model），**只需在服务器上配置 `AI_API_KEY`**。
+
+```bash
+# SSH 登录服务器后，在各环境目录下创建 .env 文件
+
+# Dev 环境
+cat > /opt/app/dev/.env << 'EOF'
+AI_API_KEY=sk-your-deepseek-api-key-here
+CONSOLE_PASSWORD=your-console-password
+EOF
+
+# Prod 环境
+cat > /opt/app/prod/.env << 'EOF'
+AI_API_KEY=sk-your-deepseek-api-key-here
+CONSOLE_PASSWORD=your-console-password
+EOF
+```
+
+> **说明**：
+> - `AI_PROVIDER`、`AI_BASE_URL`、`AI_MODEL` 已在 docker-compose 的 `environment` 中预设为 DeepSeek，`.env` 中无需重复配置。
+> - 如需切换 AI 提供商，在 `.env` 中覆盖对应变量即可（`.env` 优先级高于 `environment`）。
+> - **部署流程不会覆盖服务器上的 `.env` 文件**，密钥仅在服务器本地维护，无需通过 GitHub 管理。
+
+### 默认 AI 配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AI_PROVIDER` | `deepseek` | AI 提供商 |
+| `AI_BASE_URL` | `https://api.deepseek.com/v1` | API 端点 |
+| `AI_MODEL` | `deepseek-v4-flash` | 模型名称（免费额度） |
+| `AI_API_KEY` | （无默认值） | **必须在服务器 .env 中配置** |
+
 ## GitHub Secrets 配置
 
-在仓库 **Settings → Secrets and variables → Actions** 中配置以下 Secrets：
+部署只需要以下基础设施相关的 Secrets（AI 密钥已改为服务器本地管理）：
 
 | Secret 名称 | 说明 | 示例值 |
 |---|---|---|
@@ -50,12 +84,8 @@ echo "<YOUR_GITHUB_PAT>" | docker login ghcr.io -u <GITHUB_USERNAME> --password-
 | `VPS_SSH_KEY` | SSH 私钥（完整 PEM 内容） | `-----BEGIN RSA PRIVATE KEY-----...` |
 | `VPS_APP_DIR_DEV` | dev 环境目录 | `/opt/app/dev` |
 | `VPS_APP_DIR_PROD` | prod 环境目录 | `/opt/app/prod` |
-| `AI_API_KEY` | AI 服务密钥 | `sk-...` |
-| `AI_BASE_URL` | AI 服务端点 | `https://ahbb.m1in.com/v1` |
-| `AI_MODEL` | 默认 AI 模型 | `deepseek-v4-flash` |
-| `CONSOLE_PASSWORD` | 管理控制台密码 | 自定义强密码 |
 
-> **安全提醒**：`AI_API_KEY`、`VPS_SSH_KEY`、`CONSOLE_PASSWORD` 属高危凭证，切勿写入代码或 `.env.deploy` 以外的明文文件。`.env.deploy` 已被 `.gitignore` 排除，仅作为本地备忘。
+> ~~`AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 已从 GitHub Secrets 移除，改为服务器本地 `.env` 管理。~~
 
 ## 自动化部署流程
 
@@ -70,7 +100,7 @@ SSH 连接服务器
   ↓
 上传对应 docker-compose.yml
   ↓
-用 GitHub Secrets 生成 .env
+保留服务器本地 .env（不覆盖）
   ↓
 docker compose pull && up -d
 ```
@@ -87,6 +117,10 @@ docker compose -f /opt/app/prod/docker-compose.yml restart
 
 # 查看数据
 ls -la /opt/app/prod/data/   # SQLite 数据库文件
+
+# 更新 AI 密钥（修改后需重启容器生效）
+vim /opt/app/prod/.env       # 编辑 AI_API_KEY
+docker compose -f /opt/app/prod/docker-compose.yml up -d
 ```
 
 ## 故障排查
@@ -94,6 +128,7 @@ ls -la /opt/app/prod/data/   # SQLite 数据库文件
 | 现象 | 排查 |
 |------|------|
 | 容器不健康 | `docker logs maths-helper-prod` 查看日志 |
-| AI 不工作 | 检查 `.env` 中 `AI_API_KEY` / `AI_BASE_URL` 是否正确；`curl http://localhost/api/health` 查看 `ai_enabled` |
+| AI 不工作 | 检查服务器 `.env` 中 `AI_API_KEY` 是否正确；`curl http://localhost/api/health` 查看 `ai_enabled` |
 | 数据丢失 | 确认 `data/` 目录存在且有写权限；`docker compose config` 确认 volume 挂载 |
 | 镜像拉取失败 | 服务器需先 `docker login ghcr.io`；确认 PAT 有 `read:packages` 权限 |
+| 密钥泄露 | 密钥仅在服务器 `.env` 中，不经过 GitHub；修改后重启容器即可 |
