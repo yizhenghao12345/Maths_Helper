@@ -1,0 +1,9 @@
+services:
+  app:
+    image: ghcr.io/yizhenghao12345/maths_helper:dev
+    container_name: maths-helper-dev
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "18080:80"

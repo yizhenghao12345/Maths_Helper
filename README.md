@@ -206,6 +206,84 @@ Math_Helper/
 | `/ocr/recognize` | POST | 上传图片，返回识别文字 |
 | `/health` | GET | 健康检查（含 AI 状态） |
 
+## 自动部署（GitHub Actions + GHCR + Docker Compose）
+
+> push `dev` 分支即可自动构建镜像并部署到腾讯云 VPS 的 dev 环境。
+
+### 架构
+
+```
+本地 Trae / Claude Code / Codex
+        ↓  git push origin dev
+GitHub Actions 自动构建 Docker 镜像
+        ↓
+推送到 GitHub Container Registry (GHCR)
+        ↓  SSH
+腾讯云 VPS 执行 docker compose pull && up -d
+        ↓
+dev 环境上线 → http://<VPS_IP>:18080
+```
+
+镜像内 **nginx 托管前端静态文件 + 反向代理 `/api/` 到 uvicorn:8000**（去掉 `/api` 前缀），完整复刻本地开发时 Vite 的代理行为，前后端代码零改动。
+
+### VPS 一次性准备
+
+```bash
+# 创建目录
+sudo mkdir -p /opt/app/dev
+sudo chown -R $USER:$USER /opt/app
+
+# 创建环境变量文件
+cat > /opt/app/dev/.env << 'EOF'
+AI_PROVIDER=openai
+AI_API_KEY=你的密钥
+AI_BASE_URL=https://api.openai.com/v1
+AI_MODEL=gpt-3.5-turbo
+EOF
+
+# 若 GHCR 镜像设为私有，需登录一次（read:packages 权限的 PAT）
+echo "你的GitHub PAT" | docker login ghcr.io -u yizhenghao12345 --password-stdin
+```
+
+### GitHub Secrets 配置
+
+在仓库 Settings → Secrets and variables → Actions 中添加：
+
+| Secret | 说明 | 示例值 |
+|--------|------|--------|
+| `VPS_HOST` | 腾讯云服务器公网 IP | `43.xxx.xxx.xxx` |
+| `VPS_USER` | SSH 用户 | `ubuntu` 或 `root` |
+| `VPS_PORT` | SSH 端口 | `22` |
+| `VPS_SSH_KEY` | SSH 私钥全文 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `VPS_APP_DIR` | dev 部署目录 | `/opt/app/dev` |
+
+> GHCR 推送使用内置 `GITHUB_TOKEN`，无需额外 PAT。
+
+### 分支策略
+
+- **dev** — 默认开发发布分支，push 后自动部署到 dev 环境
+- **main** — 生产分支（暂不自动部署），通过 PR 从 dev 合并
+
+### 本地验证镜像
+
+```bash
+docker build -t maths-helper:test .
+docker run --rm -p 18080:80 --env-file ./.env.local maths-helper:test
+# 浏览器打开 http://localhost:18080 确认前端加载
+curl http://localhost:18080/api/health
+```
+
+### 相关文件
+
+| 文件 | 说明 |
+|------|------|
+| `Dockerfile` | 多阶段构建：node 构建前端 + python 运行时 + nginx + tesseract |
+| `nginx.conf` | 静态托管 + `/api/` 反代到 :8000 + SPA 回退 |
+| `docker-entrypoint.sh` | 容器启动脚本（uvicorn + nginx） |
+| `docker-compose.dev.yml` | dev 环境编排（GHCR 镜像 + 18080:80） |
+| `.github/workflows/deploy.yml` | GitHub Actions CI/CD 工作流 |
+| `.env.example` | 环境变量模板 |
+
 ## 许可证
 
 本项目仅供教育和学习使用。
