@@ -29,3 +29,8 @@ dist-ssr
 项目设想.xlsx
 
 api/data/
+
+# 部署敏感文件（私钥、真实密钥）切勿提交
+deploy/*.pem
+deploy/.env.deploy
+deploy/.env.*

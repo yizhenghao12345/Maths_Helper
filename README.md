@@ -208,67 +208,71 @@ Math_Helper/
 
 ## 自动部署（GitHub Actions + GHCR + Docker Compose）
 
-> push `dev` 分支即可自动构建镜像并部署到腾讯云 VPS 的 dev 环境。
+> push `dev` 或 `main` 分支即可自动构建镜像并部署到腾讯云 VPS 的对应环境。
 
 ### 架构
 
 ```
 本地 Trae / Claude Code / Codex
-        ↓  git push origin dev
+        ↓  git push origin dev / main
 GitHub Actions 自动构建 Docker 镜像
         ↓
 推送到 GitHub Container Registry (GHCR)
         ↓  SSH
 腾讯云 VPS 执行 docker compose pull && up -d
         ↓
-dev 环境上线 → http://<VPS_IP>:18080
+dev 环境  → http://<VPS_IP>:18080  (dev 分支)
+prod 环境 → http://<VPS_IP>:80     (main 分支)
 ```
 
 镜像内 **nginx 托管前端静态文件 + 反向代理 `/api/` 到 uvicorn:8000**（去掉 `/api` 前缀），完整复刻本地开发时 Vite 的代理行为，前后端代码零改动。
 
+### 双环境策略
+
+| 环境 | 分支 | 端口 | 镜像标签 | 容器名 | 数据目录 |
+|------|------|------|---------|--------|---------|
+| Dev  | `dev` | 18080 | `:dev` | maths-helper-dev | `/opt/app/dev/data/` |
+| Prod | `main` | 80 | `:main` | maths-helper-prod | `/opt/app/prod/data/` |
+
+两个环境同机隔离，各自持有独立的 `.env`、SQLite 数据卷（持久化，重部署不丢失）。
+
 ### VPS 一次性准备
 
 ```bash
-# 创建目录
-sudo mkdir -p /opt/app/dev
+# 创建双环境目录
+sudo mkdir -p /opt/app/{dev,prod}
 sudo chown -R $USER:$USER /opt/app
-
-# 创建环境变量文件
-cat > /opt/app/dev/.env << 'EOF'
-AI_PROVIDER=openai
-AI_API_KEY=你的密钥
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-3.5-turbo
-EOF
 
 # 若 GHCR 镜像设为私有，需登录一次（read:packages 权限的 PAT）
 echo "你的GitHub PAT" | docker login ghcr.io -u yizhenghao12345 --password-stdin
 ```
 
+> `.env` 文件无需手动创建 — GitHub Actions 部署时自动从 Secrets 生成。
+
 ### GitHub Secrets 配置
 
-在仓库 Settings → Secrets and variables → Actions 中添加：
+在仓库 **Settings → Secrets and variables → Actions** 中配置：
 
 | Secret | 说明 | 示例值 |
 |--------|------|--------|
-| `VPS_HOST` | 腾讯云服务器公网 IP | `43.xxx.xxx.xxx` |
-| `VPS_USER` | SSH 用户 | `ubuntu` 或 `root` |
+| `VPS_HOST` | 腾讯云服务器公网 IP | `124.222.206.30` |
+| `VPS_USER` | SSH 用户 | `ubuntu` |
 | `VPS_PORT` | SSH 端口 | `22` |
 | `VPS_SSH_KEY` | SSH 私钥全文 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `VPS_APP_DIR` | dev 部署目录 | `/opt/app/dev` |
+| `VPS_APP_DIR_DEV` | dev 环境目录 | `/opt/app/dev` |
+| `VPS_APP_DIR_PROD` | prod 环境目录 | `/opt/app/prod` |
+| `AI_API_KEY` | AI 服务密钥 | `sk-...` |
+| `AI_BASE_URL` | AI 服务端点 | `https://ahbb.m1in.com/v1` |
+| `AI_MODEL` | 默认 AI 模型 | `deepseek-v4-flash` |
+| `CONSOLE_PASSWORD` | 管理控制台密码 | 自定义强密码 |
 
 > GHCR 推送使用内置 `GITHUB_TOKEN`，无需额外 PAT。
-
-### 分支策略
-
-- **dev** — 默认开发发布分支，push 后自动部署到 dev 环境
-- **main** — 生产分支（暂不自动部署），通过 PR 从 dev 合并
 
 ### 本地验证镜像
 
 ```bash
 docker build -t maths-helper:test .
-docker run --rm -p 18080:80 --env-file ./.env.local maths-helper:test
+docker run --rm -p 18080:80 --env-file ./.env.example maths-helper:test
 # 浏览器打开 http://localhost:18080 确认前端加载
 curl http://localhost:18080/api/health
 ```
@@ -277,12 +281,14 @@ curl http://localhost:18080/api/health
 
 | 文件 | 说明 |
 |------|------|
-| `Dockerfile` | 多阶段构建：node 构建前端 + python 运行时 + nginx + tesseract |
+| `Dockerfile` | 多阶段构建：node 构建前端 + python 运行时 + nginx + tesseract + curl |
 | `nginx.conf` | 静态托管 + `/api/` 反代到 :8000 + SPA 回退 |
 | `docker-entrypoint.sh` | 容器启动脚本（uvicorn + nginx） |
-| `docker-compose.dev.yml` | dev 环境编排（GHCR 镜像 + 18080:80） |
-| `.github/workflows/deploy.yml` | GitHub Actions CI/CD 工作流 |
-| `.env.example` | 环境变量模板 |
+| `docker-compose.dev.yml` | dev 环境编排（`:dev` 镜像 + 18080:80 + 数据卷 + 健康检查） |
+| `docker-compose.prod.yml` | prod 环境编排（`:main` 镜像 + 80:80 + 数据卷 + 健康检查） |
+| `.github/workflows/deploy.yml` | GitHub Actions CI/CD 工作流（双环境） |
+| `deploy/README.md` | 服务器初始化与故障排查详细指南 |
+| `.env.example` | 环境变量模板（AI / 控制台密码 / CORS） |
 
 ## 许可证
 

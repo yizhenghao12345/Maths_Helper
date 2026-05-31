@@ -13,12 +13,13 @@ RUN npm run build
 # ---------- Stage 2: 运行时（nginx 托管前端 + uvicorn 跑后端）----------
 FROM python:3.11-slim AS runtime
 
-# nginx 反向代理 + tesseract OCR（含中文语言包）
+# nginx 反向代理 + tesseract OCR（含中文语言包）+ curl（容器健康检查用）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
         tesseract-ocr \
         tesseract-ocr-chi-sim \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,6 +35,8 @@ COPY api/ /app/api/
 COPY --from=frontend-build /build/dist/ /usr/share/nginx/html/
 
 # nginx 配置与启动脚本
+# 删除 Debian nginx 自带的默认站点（listen 80 default_server，会抢占 /api/ 转发导致 404）
+RUN rm -f /etc/nginx/sites-enabled/default
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

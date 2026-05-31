@@ -65,7 +65,7 @@ jobs:
           scp -P "${{ secrets.VPS_PORT }}" \
             -i ~/.ssh/deploy_key \
             docker-compose.dev.yml \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR }}/docker-compose.yml
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_DEV }}/docker-compose.yml
 
       - name: Deploy on VPS
         run: |
@@ -73,7 +73,47 @@ jobs:
             -i ~/.ssh/deploy_key \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
               set -e
-              cd /opt/app/dev
+              cd "${{ secrets.VPS_APP_DIR_DEV }}"
+              # AI 密钥等配置改为在服务器本地 .env 维护，部署不再覆盖；缺失时仅创建空文件占位（保留 AI 降级）
+              [ -f .env ] || touch .env
+              docker compose pull
+              docker compose up -d
+              docker image prune -f
+          EOF
+
+  deploy-prod:
+    name: Deploy to Prod
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${{ secrets.VPS_PORT }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy compose file
+        run: |
+          scp -P "${{ secrets.VPS_PORT }}" \
+            -i ~/.ssh/deploy_key \
+            docker-compose.prod.yml \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_APP_DIR_PROD }}/docker-compose.yml
+
+      - name: Deploy on VPS
+        run: |
+          ssh -p "${{ secrets.VPS_PORT }}" \
+            -i ~/.ssh/deploy_key \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+              set -e
+              cd "${{ secrets.VPS_APP_DIR_PROD }}"
+              # AI 密钥等配置改为在服务器本地 .env 维护，部署不再覆盖；缺失时仅创建空文件占位（保留 AI 降级）
+              [ -f .env ] || touch .env
               docker compose pull
               docker compose up -d
               docker image prune -f

@@ -1,7 +1,11 @@
 # AGENTS.md
 
-本文件为所有 AI Coding 工具（Claude Code / Codex / Trae / GLM 等）共用的 AI 协作说明。
-`CLAUDE.md` 通过引用本文件复用内容，请勿维护多份。
+本文件为所有 AI Coding 工具（Claude Code / Codex / Trae / Open Code / GLM 等）共用的 AI 协作说明。
+各工具通过各自入口文件引用本文件，请勿维护多份：
+- Claude Code → `CLAUDE.md`
+- Codex → `CODEX.md`
+- Trae → `.trae/rules/project-rules.md`
+- Open Code → `OPEN_CODE.md`
 
 > **项目事实（功能介绍、技术栈、项目结构、API 接口、节点类型等）统一维护在 [README.md](./README.md)，本文件不重复。**
 > AI 工具应关注 README 的以下章节：创意来源、核心功能、技术栈、快速开始、项目结构、API 接口。
@@ -25,6 +29,8 @@ curl http://localhost:8000/health   # 健康检查（含 AI 状态）
 > Vite dev server 已将 `/api` 代理到 `http://localhost:8000`（见 `vite.config.ts`，自动去掉 `/api` 前缀）。
 
 ## 约定与规范
+
+- **Git 分支策略**：**禁止直接在 `main` 分支上开发或提交代码。** 所有代码修改必须在 `dev` 分支上进行，通过 PR 合并到 `main`。如果当前在 `main` 分支，必须先切换到 `dev` 分支（`git checkout dev`）再开始工作。
 
 - **Git 提交信息**：使用中文，简洁明了，避免复杂词汇；并带上版本名，例如 `feat(v0.0.4): ...`（见 `.trae/rules/git-commit-message.md`）。
 - **国际化**：所有面向用户的文案需同时维护 `src/i18n/zh-CN.ts` 和 `src/i18n/en-US.ts`，不要硬编码中文。
