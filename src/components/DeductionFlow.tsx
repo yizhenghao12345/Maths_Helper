@@ -13,9 +13,10 @@ import dagre from 'dagre'
 
 const minNodeWidth = 180
 const maxNodeWidth = 280
-const mobileMinNodeWidth = 140
-const mobileMaxNodeWidth = 220
+const mobileMinNodeWidth = 200
+const mobileMaxNodeWidth = 280
 const minNodeHeight = 120
+const mobileMinNodeHeight = 100
 const nodeHorizontalPadding = 32
 const nodeVerticalPadding = 24
 const titleLineHeight = 20
@@ -30,6 +31,8 @@ const getEffectiveNodeWidths = () => {
     ? { min: mobileMinNodeWidth, max: mobileMaxNodeWidth }
     : { min: minNodeWidth, max: maxNodeWidth }
 }
+
+const getEffectiveMinHeight = () => isMobile() ? mobileMinNodeHeight : minNodeHeight
 
 const nodeColors: Record<string, { bg: string; border: string; text: string; icon: string }> = {
   condition: { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af', icon: '📋' },
@@ -74,7 +77,7 @@ function estimateNodeSize(label: string, content: string) {
 
   return {
     width,
-    height: Math.max(minNodeHeight, height),
+    height: Math.max(getEffectiveMinHeight(), height),
   }
 }
 
@@ -84,16 +87,19 @@ function getNodeBox(node: Node, measuredNodeSizes?: NodeSizeMap) {
     return measuredSize
   }
 
-  const width = typeof node.style?.width === 'number' ? node.style.width : minNodeWidth
-  const minHeight = typeof node.style?.minHeight === 'number' ? node.style.minHeight : minNodeHeight
+  const { min } = getEffectiveNodeWidths()
+  const width = typeof node.style?.width === 'number' ? node.style.width : min
+  const minHeight = typeof node.style?.minHeight === 'number' ? node.style.minHeight : getEffectiveMinHeight()
 
   return { width, height: minHeight }
 }
 
-function getLayoutedElements(nodes: Node[], edges: Edge[], measuredNodeSizes: NodeSizeMap, direction = 'LR') {
+function getLayoutedElements(nodes: Node[], edges: Edge[], measuredNodeSizes: NodeSizeMap) {
+  const mobile = isMobile()
+  const direction = mobile ? 'TB' : 'LR'
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: direction, ranksep: 120, nodesep: 60 })
+  g.setGraph({ rankdir: direction, ranksep: mobile ? 60 : 120, nodesep: mobile ? 30 : 60 })
 
   nodes.forEach((node) => {
     const { width, height } = getNodeBox(node, measuredNodeSizes)
