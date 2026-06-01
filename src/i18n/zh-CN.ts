@@ -60,6 +60,10 @@ export const zhCN = {
     nextProblem: '继续下一题',
     submitError: '提交失败,请重试',
     analyzing: 'AI 正在分析你的回答...',
+    aiThinking: 'AI正在思考...',
+    aiThinkingSub: '正在生成引导问题和选项',
+    mobileTabQuestion: '问答',
+    mobileTabFlow: '导图',
   },
   questionPanel: {
     successIcon: '✓',

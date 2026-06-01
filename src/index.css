@@ -10,6 +10,7 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 @keyframes fade-in {
@@ -48,4 +49,33 @@
 
 html, body, #root {
   height: 100%;
+}
+
+/* Mobile optimizations */
+@media (max-width: 640px) {
+  html {
+    font-size: 15px;
+  }
+
+  /* Prevent horizontal scroll on small screens */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Improve touch targets */
+  button, [role="button"] {
+    min-height: 44px;
+  }
+
+  /* Smooth scrolling */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Active press effect for mobile buttons */
+@layer utilities {
+  .active\\:scale-98:active {
+    transform: scale(0.98);
+  }
 }
