@@ -62,6 +62,10 @@ export const enUS: typeof zhCN = {
     nextProblem: 'Try Another Problem',
     submitError: 'Submission failed, please retry',
     analyzing: 'AI is analyzing your answer...',
+    aiThinking: 'AI is thinking...',
+    aiThinkingSub: 'Generating guided questions and options',
+    mobileTabQuestion: 'Q&A',
+    mobileTabFlow: 'Map',
   },
   questionPanel: {
     successIcon: '✓',

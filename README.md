@@ -1,4 +1,4 @@
-# 数学思维训练助手 v0.0.4
+# 数学思维训练助手 v0.1.2
 
 [English Documentation](./README_EN.md)
 
@@ -7,6 +7,11 @@
 ## 创意来源
 
 在AI时代，学生依赖搜题软件，导致"一看就懂，一做就错"的情况频繁发生，而学生自身却缺乏真正的解题思维。本项目旨在通过可视化、互动式引导，让学生看清思考过程，从根源上训练数学逻辑能力。
+
+## v0.1.2 更新亮点
+
+- 📱 **移动端适配** - 全面响应式布局优化，支持手机、平板等移动设备访问
+- 🧹 **代码清理** - 优化 .gitignore 配置，忽略 Python 缓存文件
 
 ## v0.0.4 更新亮点
 
@@ -134,7 +139,7 @@ npm run dev
 3. **验证 AI 状态**
 ```bash
 curl http://localhost:8000/health
-# 返回: {"status":"ok","version":"0.0.4","ai_enabled":true,"ai_provider":"qwen"}
+# 返回: {"status":"ok","version":"0.1.2","ai_enabled":true,"ai_provider":"qwen"}
 ```
 
 ## 项目结构
