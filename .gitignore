@@ -34,3 +34,5 @@ api/data/
 deploy/*.pem
 deploy/.env.deploy
 deploy/.env.*
+
+api/__pycache__/
