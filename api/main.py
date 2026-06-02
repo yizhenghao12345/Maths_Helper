@@ -4,7 +4,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -189,12 +189,15 @@ async def health_check():
 
 
 @app.post("/ocr/recognize")
-async def recognize_image(file: UploadFile = File(...)):
+async def recognize_image(
+    file: UploadFile = File(...),
+    language: str = Form("zh-CN")
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="仅支持图片文件")
 
     image_bytes = await file.read()
     base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
-    text = await extract_text_from_base64(base64_data)
+    text = await extract_text_from_base64(base64_data, language)
 
     return {"text": text}

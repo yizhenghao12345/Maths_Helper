@@ -41,9 +41,10 @@ export async function answerQuestion(
   return response.json()
 }
 
-export async function recognizeImage(file: File): Promise<{ text: string }> {
+export async function recognizeImage(file: File, language = 'zh-CN'): Promise<{ text: string }> {
   const formData = new FormData()
   formData.append('file', file)
+  formData.append('language', language)
 
   const response = await fetch('/api/ocr/recognize', {
     method: 'POST',

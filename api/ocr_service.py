@@ -4,7 +4,7 @@ import io
 import httpx
 from ai_service import ai_service
 
-async def extract_text_from_base64(base64_data: str) -> str:
+async def extract_text_from_base64(base64_data: str, language: str = "zh-CN") -> str:
     """
     优先使用多模态大模型进行高精度 OCR 与几何解析，降级至本地 Tesseract OCR。
     """
@@ -39,7 +39,8 @@ async def extract_text_from_base64(base64_data: str) -> str:
                 provider=ocr_provider,
                 api_key=ocr_api_key,
                 base_url=ocr_base_url,
-                model=ocr_model
+                model=ocr_model,
+                language=language
             )
             if text:
                 return text
@@ -54,7 +55,7 @@ async def extract_text_from_base64(base64_data: str) -> str:
         return f"降级本地 OCR 失败: {str(e)}"
 
 
-async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_url: str, model: str) -> str:
+async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_url: str, model: str, language: str = "zh-CN") -> str:
     """
     通过多模态模型解析题目与几何图象
     """
@@ -62,14 +63,43 @@ async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_ur
         # 默认假设是 png 图片，补齐头部
         base64_data = f"data:image/png;base64,{base64_data}"
 
-    prompt = (
-        "你是一个高精度的数学题目识别助手。请识别并提取图片中的数学题目内容。\n"
-        "要求：\n"
-        "1. 请使用 LaTeX 语法输出所有的数学公式和符号（例如用 $...$ 或 $$...$$）。\n"
-        "2. 如果图片中包含几何图形、函数图象等视觉元素，请在识别出文本题目的同时，用详尽、逻辑严密的文字描述图形中的几何结构、各线段之间的连接与位置关系、已知的长度、角度以及图象关键点坐标。\n"
-        "3. 整理后的输出应能让一个看不见图片的盲人（或纯文本大模型）仅通过阅读你输出的文本，就能完全理解题目并正确解答该几何/数学题。\n"
-        "4. 直接输出整理后的题目文本，不要包含任何多余的开场白或解释。"
-    )
+    if language == "en-US":
+        prompt = (
+            "You are a high-precision math problem recognition assistant specialized in Chinese and English math textbook problems.\n"
+            "Follow these steps strictly:\n\n"
+            "【Step 1 — Recognize the problem text】\n"
+            "Read all text visible in the image (including text below or beside the figure). "
+            "Output it verbatim, using LaTeX syntax for all math expressions (e.g., $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n\n"
+            "【Step 2 — Describe the geometric figure (if present)】\n"
+            "If there is a geometric diagram, describe it in the following order:\n"
+            "  a. Figure type (e.g., triangle, quadrilateral) and its vertex labels (e.g., △ABC with A at top, B at bottom-left, C at bottom-right).\n"
+            "  b. All labeled interior/boundary points and their locations (e.g., 'D and E lie on AC, dividing it into three equal parts AD=DE=EC').\n"
+            "  c. All line segments or rays drawn inside the figure and the intersection points they create (e.g., 'BD and AG intersect at M; BE and AF intersect at N').\n"
+            "  d. Any shaded, colored, or highlighted regions and their boundary vertices (e.g., 'Quadrilateral MGFN is shaded in blue').\n"
+            "  e. Any known numerical values shown in or around the figure.\n\n"
+            "【Step 3 — State the question】\n"
+            "Clearly state what is being asked (e.g., 'Find the area of the shaded region').\n\n"
+            "Output format: combine all three steps into one coherent problem statement. "
+            "Do NOT include section headers in the output. Do NOT add any opening remarks or extra explanation."
+        )
+    else:
+        prompt = (
+            "你是一个高精度的数学题目识别助手，专门处理中小学及竞赛数学题目（含文字题干与几何图形）。\n"
+            "请按以下步骤严格执行：\n\n"
+            "【第一步 — 识别题目文字】\n"
+            "读取图片中所有可见文字（包括图形下方或旁边的文字说明），原文转录。\n"
+            "所有数学符号与公式请使用 LaTeX 语法输出，例如 $AD=DE=EC$、$S_{\\triangle ABC}=1$。\n\n"
+            "【第二步 — 描述几何图形（如有）】\n"
+            "若图中存在几何图形，请按如下顺序描述：\n"
+            "  a. 图形类型及各顶点标注与位置（例如：△ABC，A 在顶部，B 在左下，C 在右下）。\n"
+            "  b. 图形内部或边上的所有标注点及其位置关系（例如：D、E 在 AC 上，将 AC 三等分，满足 $AD=DE=EC$）。\n"
+            "  c. 图形内部所有线段/射线的连接关系及其交点（例如：连接 BD 和 BE，连接 AG 和 AF；BE 与 AG 交于点 M，BE 与 AF 交于点 N）。\n"
+            "  d. 图中标有颜色（阴影、填充）的区域及其顶点（例如：四边形 MGFN 为蓝色阴影区域）。\n"
+            "  e. 图中或图旁标注的任何已知数值。\n\n"
+            "【第三步 — 明确求解目标】\n"
+            "清晰说明题目要求解什么（例如：求阴影部分的面积）。\n\n"
+            "输出格式：将以上三步合并为一段连贯的题目描述，直接输出，不要在输出中包含步骤标题，也不要加任何开场白或解释说明。"
+        )
 
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -94,7 +124,7 @@ async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_ur
             }
         ],
         "temperature": 0.2,
-        "max_tokens": 1500
+        "max_tokens": 2000
     }
 
     url = f"{base_url}/chat/completions"

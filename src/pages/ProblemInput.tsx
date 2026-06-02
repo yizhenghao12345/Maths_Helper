@@ -47,7 +47,7 @@ const ProblemInput = () => {
     setError('')
 
     try {
-      const result = await recognizeImage(imageFile)
+      const result = await recognizeImage(imageFile, language)
       if (result.text) {
         setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
       } else {
