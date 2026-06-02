@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
 
-app = FastAPI(title="Math Thinking Trainer API", version="0.0.4", lifespan=lifespan)
+app = FastAPI(title="Math Thinking Trainer API", version="0.1.3", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -179,7 +179,7 @@ async def answer_question(request: QuestionRequest):
 async def health_check():
     return {
         "status": "ok",
-        "version": "0.0.4",
+        "version": "0.1.3",
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,

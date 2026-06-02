@@ -1,4 +1,4 @@
-# Math Thinking Trainer v0.0.4
+# Math Thinking Trainer v0.1.3
 
 [中文文档](./README.md)
 
@@ -7,6 +7,11 @@
 ## Origin
 
 In the AI era, students rely heavily on problem-solving apps, leading to the frequent "understand at a glance, fail when solving" phenomenon. Students lack genuine problem-solving thinking. This project aims to visualize and interactively guide students through the thinking process, training mathematical logical abilities from the ground up.
+
+## v0.1.3 Highlights
+
+- 📱 **Mobile Adaptation** - Fully responsive layout optimization, supporting mobile phones and tablets
+- 🧹 **Code Cleanup** - Optimized .gitignore configuration, ignoring Python cache files
 
 ## v0.0.4 Highlights
 
@@ -134,7 +139,7 @@ Frontend runs at http://localhost:5173
 3. **Verify AI Status**
 ```bash
 curl http://localhost:8000/health
-# Returns: {"status":"ok","version":"0.0.4","ai_enabled":true,"ai_provider":"qwen"}
+# Returns: {"status":"ok","version":"0.1.3","ai_enabled":true,"ai_provider":"qwen"}
 ```
 
 ## Project Structure
