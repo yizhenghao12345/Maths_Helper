@@ -4,7 +4,6 @@ import uuid
 from ai_service import ai_service
 
 MAX_CONSECUTIVE_ERRORS = 2
-TOTAL_STEPS = 3
 
 
 def _adopt_background_parsed_problem(session):
@@ -21,6 +20,16 @@ def _adopt_background_parsed_problem(session):
         session.parsed_problem = None
     finally:
         session.parsed_problem_task = None
+
+
+def _get_total_steps(session) -> int:
+    """根据 parsed_problem 的 suggested_steps 动态决定总步数，默认 3。"""
+    parsed = getattr(session, "parsed_problem", None)
+    if isinstance(parsed, dict):
+        steps = parsed.get("suggested_steps", [])
+        if isinstance(steps, list) and len(steps) >= 2:
+            return max(2, min(len(steps), 6))
+    return 3
 
 
 async def generate_question(
@@ -53,6 +62,7 @@ async def generate_question(
                 current_node_id,
                 current_question_text,
                 current_options,
+                _get_total_steps(session),
             )
         except Exception as e:
             print(f"AI服务调用失败，使用默认逻辑: {e}")
@@ -67,6 +77,7 @@ async def _generate_ai_question(
     current_node_id: str,
     current_question_text: Optional[str] = None,
     current_options: Optional[list[str]] = None,
+    total_steps: int = 3,
 ) -> QuestionResponse:
     language = _get_language(session)
     texts = _get_texts(language)
@@ -76,7 +87,7 @@ async def _generate_ai_question(
             problem=session.problem,
             history=getattr(session, "question_history", []),
             current_step=session.current_step,
-            total_steps=TOTAL_STEPS,
+            total_steps=total_steps,
             parsed_problem=getattr(session, "parsed_problem", None),
             language=language,
             current_node_context=_get_current_node_context(session, current_node_id),
@@ -122,7 +133,7 @@ async def _generate_ai_question(
         response = QuestionResponse(
             isCorrect=True,
             feedback=success_feedback,
-            isCompleted=next_step >= TOTAL_STEPS,
+            isCompleted=next_step >= total_steps,
             nextNodes=[new_node],
         )
 
@@ -153,7 +164,7 @@ async def _generate_ai_question(
             problem=session.problem,
             history=session.question_history,
             current_step=session.current_step,
-            total_steps=TOTAL_STEPS,
+            total_steps=total_steps,
             parsed_problem=getattr(session, "parsed_problem", None),
             language=language,
             current_node_context=_get_node_context_text(new_node),
@@ -207,7 +218,7 @@ async def _generate_ai_question(
             problem=session.problem,
             history=session.question_history,
             current_step=session.current_step,
-            total_steps=TOTAL_STEPS,
+            total_steps=total_steps,
             parsed_problem=getattr(session, "parsed_problem", None),
             language=language,
             current_node_context=_get_node_context_text(dead_end_node),
@@ -263,7 +274,7 @@ async def _generate_ai_question(
         problem=session.problem,
         history=session.question_history,
         current_step=session.current_step,
-        total_steps=TOTAL_STEPS,
+        total_steps=total_steps,
         parsed_problem=getattr(session, "parsed_problem", None),
         language=language,
         current_node_context=_get_node_context_text(exploration_node),

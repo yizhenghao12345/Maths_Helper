@@ -50,6 +50,32 @@ def _is_english(language: str) -> bool:
     return language == "en-US"
 
 
+# 提问类型池：按步骤轮换，避免每步都问"下一步做什么"。
+QUESTION_TYPES_ZH = [
+    ("判断方向", "问学生当前应优先关注哪个方向或信息，让其在几个合理策略中权衡取舍。"),
+    ("识别错误", "给出几个看似可行的思路，让学生找出其中存在问题或会走入死路的那一个。"),
+    ("预测结果", "假设采用某种操作，问学生这样做之后会得到什么、或会遇到什么障碍。"),
+    ("补全推理", "给出一条已经进行到一半的推理链，让学生补上其中缺失的关键一步。"),
+    ("比较方案", "给出两到三种不同的处理方式，让学生判断哪种更合适或哪些本质等价。"),
+]
+
+QUESTION_TYPES_EN = [
+    ("choose direction", "Ask which information or strategy to prioritize now, weighing several reasonable options."),
+    ("spot the flaw", "Present a few plausible-looking ideas and ask the student to find the one that is flawed or leads to a dead end."),
+    ("predict outcome", "Assume a particular operation is taken and ask what result or obstacle it leads to."),
+    ("complete reasoning", "Give a half-finished reasoning chain and ask the student to fill in the missing key step."),
+    ("compare approaches", "Offer two or three different approaches and ask which is more suitable or which are essentially equivalent."),
+]
+
+
+def _pick_question_type(current_step: int, english: bool) -> tuple[str, str]:
+    """第一步固定用'判断方向'，之后按步骤轮换提问类型。"""
+    pool = QUESTION_TYPES_EN if english else QUESTION_TYPES_ZH
+    if current_step <= 0:
+        return pool[0]
+    return pool[current_step % len(pool)]
+
+
 def _join_items(items: list[str], fallback: str) -> str:
     values = [item for item in items if item]
     return ", ".join(values) if values else fallback
@@ -104,40 +130,40 @@ def _default_socratic_question(
                     "question": "What quantity do we really need first to find the total distance the dog runs?",
                     "options": [
                         "A. Find how long it takes for the two people to meet, then use dog's speed x time",
-                        "B. Count how many times the dog turns around",
-                        "C. Add the dog's speed to Xiao Ming's speed only",
-                        "D. Guess the answer directly",
+                        "B. Track each leg the dog runs separately and add them up",
+                        "C. Use the distance between the two people as the dog's total path",
+                        "D. Add all three speeds together to get the dog's effective speed",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "Good. The key is the meeting time. Once time is known, the dog's total distance is easy to get.",
-                    "error_feedback": "Try focusing on what remains unchanged during the whole process: the dog runs the entire time until the two people meet.",
-                    "explanation": "This type of problem is usually solved by finding meeting time first.",
+                    "success_feedback": "Exactly. The meeting time is the key. Once you know how long they take to meet, the dog's total distance follows immediately.",
+                    "error_feedback": "The dog runs non-stop until the two people meet — no need to track individual legs. What single quantity captures the whole running time?",
+                    "explanation": "This type of problem is solved by finding meeting time first, then applying distance = speed x time for the dog.",
                 },
                 {
-                    "question": "How do we find the meeting time of the two people?",
+                    "question": "To find the meeting time of the two people, which formula applies?",
                     "options": [
-                        "A. Use total distance divided by their combined speed",
-                        "B. Use the dog's speed divided by the distance",
-                        "C. Subtract the two walking speeds first and ignore the distance",
-                        "D. Count the dog's turning points",
+                        "A. Time = total distance / (sum of both speeds)",
+                        "B. Time = total distance / (difference of both speeds)",
+                        "C. Time = total distance / (only the faster person's speed)",
+                        "D. Time = dog's speed x total distance",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "Exactly. Since they walk toward each other, their speeds add up.",
-                    "error_feedback": "Think about the distance between them shrinking every minute. Which speed describes that shrinking?",
-                    "explanation": "For moving toward each other, the relative speed is the sum of their speeds.",
+                    "success_feedback": "Exactly. Since they approach each other, their speeds combine — the gap shrinks at the rate of both speeds added together.",
+                    "error_feedback": "Think about how quickly the gap between them shrinks each minute. Does it shrink at the sum or the difference of their speeds?",
+                    "explanation": "For objects moving toward each other, relative speed = sum of both speeds.",
                 },
                 {
-                    "question": "After finding the meeting time, what should we do next to get the dog's total distance?",
+                    "question": "After finding the meeting time, which step correctly gives the dog's total distance?",
                     "options": [
-                        "A. Multiply the dog's speed by the meeting time",
-                        "B. Add the dog's speed to both walking speeds",
-                        "C. Divide the dog's speed by the number of turns",
-                        "D. Use the distance between the houses again directly",
+                        "A. Dog's distance = dog's speed x meeting time",
+                        "B. Dog's distance = (dog's speed + one person's speed) x meeting time",
+                        "C. Dog's distance = total distance between the two starting points",
+                        "D. Dog's distance = meeting time x average of all three speeds",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "Right. The dog's distance is just speed multiplied by the total running time.",
-                    "error_feedback": "The dog keeps running the whole time until the two people meet. Which formula directly uses that fact?",
-                    "explanation": "Once the total running time is known, distance = speed x time.",
+                    "success_feedback": "Correct. The dog runs at a fixed speed for the entire duration — distance = speed x time.",
+                    "error_feedback": "The dog's distance depends only on its own speed and the total time it ran — not on the other people's speeds.",
+                    "explanation": "Once the total running time is known, distance = speed x time gives the dog's path directly.",
                 },
             ]
         else:
@@ -146,40 +172,40 @@ def _default_socratic_question(
                     "question": "这道题要算小狗一共跑了多少米，最关键应该先求什么？",
                     "options": [
                         "A. 先求两人相遇用了多少时间，再用小狗速度乘时间",
-                        "B. 先数小狗一共来回跑了多少次",
-                        "C. 只把小狗速度和小明速度相加",
-                        "D. 直接猜一个结果",
+                        "B. 分段追踪小狗每次来回的路程，最后累加",
+                        "C. 用两人之间的初始距离直接当作小狗跑的总路程",
+                        "D. 把三者的速度全部相加，得到小狗的有效速度",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "很好，关键就是先求相遇时间。时间一确定，小狗总路程就能直接求出来。",
-                    "error_feedback": "再想想，整段过程中不变的是什么？小狗一直跑到两人相遇为止，所以关键是总时间。",
-                    "explanation": "这类相遇问题通常先求相遇时间，再求小狗跑的总路程。",
+                    "success_feedback": "很好，关键就是先求相遇时间。时间一确定，小狗总路程就能直接求出来，不用逐段追踪。",
+                    "error_feedback": "小狗从始至终不停地跑，不需要逐段计算。整段过程中，哪个量可以一次捕捉到小狗的全程时间？",
+                    "explanation": "这类相遇问题先求相遇时间，然后用路程 = 速度 x 时间一步得出小狗的总路程。",
                 },
                 {
-                    "question": "两人同时相向而行，相遇时间应该怎样求？",
+                    "question": "两人同时相向而行，求相遇时间应该用哪个公式？",
                     "options": [
-                        "A. 用总路程除以两人的速度和",
-                        "B. 用小狗速度除以总路程",
-                        "C. 只用两人的速度差来计算",
-                        "D. 先算小狗跑了多少趟",
+                        "A. 时间 = 总路程 / (两人速度之和)",
+                        "B. 时间 = 总路程 / (两人速度之差)",
+                        "C. 时间 = 总路程 / (只用速度较快那人的速度)",
+                        "D. 时间 = 小狗速度 x 总路程",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "正确。相向而行时，距离缩短的速度就是两人的速度和。",
-                    "error_feedback": "想一想：每分钟两人之间的距离一共减少多少米？",
-                    "explanation": "相向而行要用速度和，也就是相遇问题里的相对速度。",
+                    "success_feedback": "正确。相向而行时，两人每分钟共同消耗的距离是两速之和，所以用速度和来除。",
+                    "error_feedback": "想想看：每分钟两人之间的距离减少了多少？是两速之和还是速度差？",
+                    "explanation": "相向而行的相对速度 = 两速之和，这是相遇问题的核心公式。",
                 },
                 {
-                    "question": "求出相遇时间后，下一步怎样得到小狗跑的总路程？",
+                    "question": "求出相遇时间后，哪一步能正确得到小狗跑的总路程？",
                     "options": [
-                        "A. 用小狗速度乘相遇时间",
-                        "B. 把小狗速度和两人的速度全部相加",
-                        "C. 用小狗速度除以掉头次数",
-                        "D. 再直接把 1200 米乘一次",
+                        "A. 小狗路程 = 小狗速度 x 相遇时间",
+                        "B. 小狗路程 = (小狗速度 + 其中一人速度) x 相遇时间",
+                        "C. 小狗路程 = 两人的初始距离",
+                        "D. 小狗路程 = 相遇时间 x 三人速度的平均值",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "对了。小狗从出发到相遇这段时间一直在跑，总路程就是速度乘时间。",
-                    "error_feedback": "抓住核心：小狗并不需要一趟一趟分开算，只要知道它跑了多久。",
-                    "explanation": "知道总时间后，直接用路程公式即可求出结果。",
+                    "success_feedback": "对了。小狗以固定速度跑完全程，路程 = 速度 x 时间，一步到位。",
+                    "error_feedback": "小狗的路程只取决于它自己的速度和跑的时间，与两人速度无关。",
+                    "explanation": "知道总时间后，路程公式直接给出小狗的全程，无需逐段相加。",
                 },
             ]
 
@@ -190,86 +216,86 @@ def _default_socratic_question(
         if english:
             equation_questions = [
                 {
-                    "question": "Looking at this equation, what should the first step be?",
+                    "question": "Looking at this equation, what is the most effective first step?",
                     "options": [
-                        "A. Calculate randomly right away",
-                        "B. Rearrange terms so the unknown is on one side",
-                        "C. Ignore the equality and estimate",
-                        "D. Give up",
-                    ],
-                    "correct_index": 1,
-                    "success_feedback": "Good start. Rearranging the equation is the key first move.",
-                    "error_feedback": "Think again. Solving an equation usually starts by organizing the two sides.",
-                    "explanation": "Collect the terms with the unknown together.",
-                },
-                {
-                    "question": "After rearranging, what should happen next?",
-                    "options": [
-                        "A. Combine like terms to simplify the equation",
-                        "B. Copy the problem again",
-                        "C. Jump straight to the answer",
-                        "D. Switch to another problem",
+                        "A. Move all terms with the unknown to one side and constants to the other",
+                        "B. Divide both sides by the coefficient of the unknown immediately",
+                        "C. Substitute a trial value to check which side is larger",
+                        "D. Multiply out all brackets on both sides before doing anything else",
                     ],
                     "correct_index": 0,
-                    "success_feedback": "Correct. Simplifying makes the relationship clearer.",
-                    "error_feedback": "Not yet. The equation still needs to be simplified.",
-                    "explanation": "Combine like terms and simplify the expression.",
+                    "success_feedback": "Correct. Rearranging terms first gives you a clean equation where combining like terms is straightforward.",
+                    "error_feedback": "Dividing by the coefficient works at a later stage, but the equation isn't ready for that yet — there are still terms on both sides to organize.",
+                    "explanation": "Collect terms with the unknown on one side so you can then combine and simplify.",
                 },
                 {
-                    "question": "After simplifying, how do we isolate the unknown?",
+                    "question": "After moving terms to their respective sides, what comes next?",
                     "options": [
-                        "A. Guess a number",
-                        "B. Divide both sides by the coefficient",
-                        "C. Stop here",
-                        "D. Write any answer",
+                        "A. Combine like terms on each side to get the simplest form",
+                        "B. Divide both sides by the unknown's coefficient right now",
+                        "C. Square both sides to eliminate the unknown from the denominator",
+                        "D. Swap the left and right sides for convenience",
                     ],
-                    "correct_index": 1,
-                    "success_feedback": "Exactly. That isolates the unknown and gives the answer.",
-                    "error_feedback": "Take another look. The final goal is to isolate the unknown.",
-                    "explanation": "Solve for the unknown value.",
+                    "correct_index": 0,
+                    "success_feedback": "Good. Combining like terms reduces the equation to its simplest form, making the next step obvious.",
+                    "error_feedback": "Dividing by the coefficient is close but premature — if there are still uncombined like terms, do that first so the coefficient is clear.",
+                    "explanation": "Always simplify both sides fully before isolating the unknown.",
+                },
+                {
+                    "question": "The equation is now in its simplest form. How do we isolate the unknown?",
+                    "options": [
+                        "A. Divide both sides by the coefficient of the unknown",
+                        "B. Subtract the unknown's value from both sides",
+                        "C. Take the square root of both sides",
+                        "D. Move the unknown to the denominator and flip the equation",
+                    ],
+                    "correct_index": 0,
+                    "success_feedback": "Exactly right. Dividing both sides by the coefficient leaves the unknown alone and gives the final answer.",
+                    "error_feedback": "Subtracting the unknown from both sides would eliminate it entirely. The goal is to isolate it — dividing by its coefficient does that.",
+                    "explanation": "To isolate the unknown, divide both sides by its coefficient.",
                 },
             ]
             index = current_step if 0 <= current_step < len(equation_questions) else len(equation_questions) - 1
             return equation_questions[index]
         equation_questions = [
             {
-                "question": "观察这个方程，你认为第一步应该做什么？",
+                "question": "观察这个方程，最有效的第一步是什么？",
                 "options": [
-                    "A. 直接计算结果",
-                    "B. 移项，把含未知数的项移到一边",
-                    "C. 忽略等式，随便算",
-                    "D. 放弃不做",
-                ],
-                "correct_index": 1,
-                "success_feedback": "很好。移项是解方程的重要第一步。",
-                "error_feedback": "再想想。解方程时通常要先整理等式。",
-                "explanation": "将含有未知数的项集中处理。",
-            },
-            {
-                "question": "移项后，下一步应该做什么？",
-                "options": [
-                    "A. 合并同类项，化简等式",
-                    "B. 重新抄一遍题目",
-                    "C. 直接写出答案",
-                    "D. 换个题目做",
+                    "A. 移项，把含未知数的项移到一边、常数项移到另一边",
+                    "B. 立即把两边都除以未知数的系数",
+                    "C. 代入一个试探值，看哪边更大",
+                    "D. 先把所有括号展开，再做其他步骤",
                 ],
                 "correct_index": 0,
-                "success_feedback": "正确。化简能让等式关系更清晰。",
-                "error_feedback": "别着急，还需要进一步整理。",
-                "explanation": "合并同类项并化简表达式。",
+                "success_feedback": "正确。先移项整理，把未知数集中到一边，为合并同类项做准备。",
+                "error_feedback": "除以系数是后面的步骤，现在两边还有项没整理好，先移项才能让系数清晰可见。",
+                "explanation": "将含未知数的项集中到一边，常数项移到另一边，便于后续化简。",
             },
             {
-                "question": "化简后，如何求出未知数？",
+                "question": "移项完成后，下一步最该做什么？",
                 "options": [
-                    "A. 猜一个数字",
-                    "B. 两边同时除以系数",
-                    "C. 不用求了",
-                    "D. 随便写答案",
+                    "A. 合并同类项，把两边分别化简到最简形式",
+                    "B. 现在就把两边除以未知数的系数",
+                    "C. 两边同时平方，消去分母中的未知数",
+                    "D. 把等式的左右两边互换，方便计算",
                 ],
-                "correct_index": 1,
-                "success_feedback": "太棒了。这样就能得到最终答案。",
-                "error_feedback": "再思考一下。目标是把未知数单独留下。",
-                "explanation": "求解未知数的值。",
+                "correct_index": 0,
+                "success_feedback": "很好。合并同类项把方程化到最简，下一步的系数就一目了然。",
+                "error_feedback": "除以系数方向对，但还有点早——若同类项还没合并，系数不明确，除法容易出错。",
+                "explanation": "先合并同类项化简两边，再隔离未知数，步骤更稳。",
+            },
+            {
+                "question": "方程已化到最简，怎样求出未知数？",
+                "options": [
+                    "A. 两边同时除以未知数的系数",
+                    "B. 两边同时减去未知数本身",
+                    "C. 两边同时开平方",
+                    "D. 把未知数移到分母并翻转等式",
+                ],
+                "correct_index": 0,
+                "success_feedback": "完全正确。两边除以系数后，未知数就单独留在一边，答案直接得出。",
+                "error_feedback": "两边减去未知数会把它消掉，而我们要的是留下它。除以系数才能把未知数单独隔离出来。",
+                "explanation": "两边同除以未知数的系数，即可求出未知数的值。",
             },
         ]
         index = current_step if 0 <= current_step < len(equation_questions) else len(equation_questions) - 1
@@ -279,86 +305,86 @@ def _default_socratic_question(
         if english:
             geometry_questions = [
                 {
-                    "question": "What geometric figure or relationship appears in this problem?",
+                    "question": "Before calculating, which information about this geometric figure is most important to pin down?",
                     "options": [
-                        "A. Guess without reading carefully",
-                        "B. Identify the figure and its properties",
-                        "C. Ignore the figure and calculate directly",
-                        "D. Skip this step",
+                        "A. Identify the figure type and note its key properties (e.g. parallel sides, right angles)",
+                        "B. Write down all given numbers first, then decide what figure it is later",
+                        "C. Use the perimeter formula immediately since area and perimeter share the same variables",
+                        "D. Convert all units to the same scale before identifying the figure",
                     ],
-                    "correct_index": 1,
-                    "success_feedback": "Good. Recognizing the figure is the right starting point.",
-                    "error_feedback": "Try again. Geometry problems usually begin with identifying the figure.",
-                    "explanation": "Identify the shape and its important properties.",
+                    "correct_index": 0,
+                    "success_feedback": "Good. Identifying the figure and its properties first ensures you choose the right formula in the next step.",
+                    "error_feedback": "Knowing the figure type determines which formula applies — getting the numbers without the right formula leads to the wrong calculation.",
+                    "explanation": "Identify the shape and its key properties before choosing any formula.",
                 },
                 {
-                    "question": "After identifying the figure, what should you choose next?",
+                    "question": "You've identified the figure. How do you decide which formula to use?",
                     "options": [
-                        "A. Pick any formula",
-                        "B. Choose a method or formula based on the goal",
-                        "C. Estimate without a formula",
-                        "D. Give up",
+                        "A. Match the formula to what the problem asks for (area, perimeter, angle, etc.)",
+                        "B. Use the most general formula you remember, since it works for all shapes",
+                        "C. Apply both area and perimeter formulas, then pick the answer that looks right",
+                        "D. Use the formula for a similar but simpler shape as an approximation",
                     ],
-                    "correct_index": 1,
-                    "success_feedback": "Correct. Matching the method to the goal is essential.",
-                    "error_feedback": "Slow down. The method should match what the problem asks for.",
-                    "explanation": "Choose the most suitable formula or approach.",
+                    "correct_index": 0,
+                    "success_feedback": "Correct. The goal of the problem — area, perimeter, angle — directly determines which formula to apply.",
+                    "error_feedback": "There is no single formula that works for all shapes and goals. The problem's target quantity should guide your formula choice.",
+                    "explanation": "Choose the formula that matches both the figure type and the quantity being asked for.",
                 },
                 {
-                    "question": "When substituting values, what should you pay attention to?",
+                    "question": "When substituting values into the formula, what is most likely to cause an error?",
                     "options": [
-                        "A. Nothing in particular",
-                        "B. Units and calculation accuracy",
-                        "C. Rough guessing only",
-                        "D. Skip the calculation",
+                        "A. Mismatched units or substituting a measurement meant for a different dimension",
+                        "B. Not converting fractions to decimals before substituting",
+                        "C. Writing the formula on the left instead of the right side of the equals sign",
+                        "D. Using the exact value instead of rounding to one decimal place",
                     ],
-                    "correct_index": 1,
-                    "success_feedback": "Exactly. Careful substitution prevents avoidable mistakes.",
-                    "error_feedback": "Think again. Details like units and precision matter here.",
-                    "explanation": "Substitute values carefully and compute accurately.",
+                    "correct_index": 0,
+                    "success_feedback": "Exactly. Unit mismatches and substituting the wrong measurement are the most common sources of error.",
+                    "error_feedback": "Fraction-to-decimal conversion rarely causes mistakes in geometry. Watch out for unit mismatches and whether you're using the right dimension.",
+                    "explanation": "Check that units are consistent and each variable gets its correct measurement before computing.",
                 },
             ]
             index = current_step if 0 <= current_step < len(geometry_questions) else len(geometry_questions) - 1
             return geometry_questions[index]
         geometry_questions = [
             {
-                "question": "这道题涉及什么几何图形或关系？",
+                "question": "计算前，最需要先确认这个几何图形的哪方面信息？",
                 "options": [
-                    "A. 随意猜测",
-                    "B. 识别图形和性质",
-                    "C. 不管图形直接算",
-                    "D. 跳过这步",
+                    "A. 先判断图形类型，记录关键性质（如平行边、直角等）",
+                    "B. 先把所有已知数字列出来，之后再确定是什么图形",
+                    "C. 直接套周长公式，因为面积和周长用同一批变量",
+                    "D. 先把所有单位统一，之后再识别图形",
                 ],
-                "correct_index": 1,
-                "success_feedback": "很好。认清图形是关键起点。",
-                "error_feedback": "想想看。几何题通常先要识别图形和性质。",
-                "explanation": "识别几何图形及其重要性质。",
+                "correct_index": 0,
+                "success_feedback": "很好。先确认图形类型和性质，才能在下一步选对公式。",
+                "error_feedback": "图形类型决定了用哪个公式——先凑数字却没选对公式，计算方向就会出错。",
+                "explanation": "选公式之前，先弄清图形及其关键性质。",
             },
             {
-                "question": "确定图形后，下一步应该选什么方法？",
+                "question": "已经确认了图形，怎么决定用哪个公式？",
                 "options": [
-                    "A. 随便选公式",
-                    "B. 根据所求选择公式或方法",
-                    "C. 不用公式直接目测",
-                    "D. 放弃",
+                    "A. 根据题目所求（面积、周长、角度等）来匹配公式",
+                    "B. 用自己记得最清楚的那个通用公式，因为它对所有图形都适用",
+                    "C. 面积和周长两个公式都算一遍，再选看起来合理的答案",
+                    "D. 用类似但更简单的图形的公式近似代替",
                 ],
-                "correct_index": 1,
-                "success_feedback": "正确。方法要和题目目标匹配。",
-                "error_feedback": "别急。先想想题目要求你求什么。",
-                "explanation": "选择合适的解题公式或方法。",
+                "correct_index": 0,
+                "success_feedback": "正确。题目要求的量——面积、周长还是角度——直接决定用哪个公式。",
+                "error_feedback": "没有一个公式能适用所有图形和所有目标量。题目的求解目标才是选公式的依据。",
+                "explanation": "根据图形类型和所求量，选择最对应的公式。",
             },
             {
-                "question": "代入数值计算时需要注意什么？",
+                "question": "把数值代入公式时，最容易引发错误的是哪种情况？",
                 "options": [
-                    "A. 不用注意",
-                    "B. 注意单位和计算精度",
-                    "C. 大概估算就行",
-                    "D. 不计算了",
+                    "A. 单位不一致，或把用于另一维度的量代错了位置",
+                    "B. 代入前没有把分数转换成小数",
+                    "C. 把公式写在等号左边而不是右边",
+                    "D. 使用了精确值而不是四舍五入到一位小数",
                 ],
-                "correct_index": 1,
-                "success_feedback": "非常棒。细心处理细节很重要。",
-                "error_feedback": "再想想。单位和计算准确性会影响结果。",
-                "explanation": "认真代入数值并准确计算。",
+                "correct_index": 0,
+                "success_feedback": "完全正确。单位不统一和量搞混（如把直径当半径代入）是几何计算最常见的错误源。",
+                "error_feedback": "分数转小数很少出错。更要注意的是单位是否一致，以及是否把正确的那个量代入了公式中正确的位置。",
+                "explanation": "代入前检查：单位是否统一，每个变量是否对应了正确的测量值。",
             },
         ]
         index = current_step if 0 <= current_step < len(geometry_questions) else len(geometry_questions) - 1
@@ -366,31 +392,31 @@ def _default_socratic_question(
 
     if english:
         return {
-            "question": f"Step {current_step + 1}: what should we focus on next?",
+            "question": f"Step {current_step + 1}: which of the following best describes the right focus right now?",
             "options": [
-                "A. Analyze the known conditions and identify key information",
-                "B. Build an equation or relationship from the information",
-                "C. Review relevant formulas or theorems",
-                "D. I am not sure and need a hint",
+                "A. Pin down what is known and what is being asked before choosing any method",
+                "B. Jump straight into building an equation using the numbers given",
+                "C. Search for a formula that uses all the given numbers at once",
+                "D. Work backwards from a guessed answer to see if it fits",
             ],
             "correct_index": 0,
-            "success_feedback": "Good choice. Keep building the reasoning step by step.",
-            "error_feedback": "Take another look at the goal and the given information.",
-            "explanation": "This step is about identifying the most useful information first.",
+            "success_feedback": "Good. Clarifying what you know and what you need is always the most reliable starting point.",
+            "error_feedback": "Building equations or picking formulas too early can lead you down the wrong path if the goal isn't clear yet. Start by identifying knowns and unknowns.",
+            "explanation": "Before choosing any method, make sure the known conditions and target are fully understood.",
         }
 
     return {
-        "question": f"第{current_step + 1}步：你觉得接下来应该怎么做？",
+        "question": f"第{current_step + 1}步：以下哪个描述最符合当前应该关注的事情？",
         "options": [
-            "A. 分析已知条件，找出关键信息",
-            "B. 尝试建立方程或关系式",
-            "C. 回顾相关公式和定理",
-            "D. 不确定，需要提示",
+            "A. 先弄清楚已知量和待求量，再决定用什么方法",
+            "B. 直接用题目给的数字建立方程",
+            "C. 找一个能把所有已知数一次用完的公式",
+            "D. 从猜测的答案出发，反推看是否符合条件",
         ],
         "correct_index": 0,
-        "success_feedback": "很好！继续深入思考。",
-        "error_feedback": "再想想看，先回到题目目标和已知条件。",
-        "explanation": "这一步的关键在于先找准可用信息。",
+        "success_feedback": "很好！先搞清楚已知和所求，是最可靠的出发点。",
+        "error_feedback": "目标还没明确就急着建方程或套公式，容易走弯路。先确认已知量和待求量，再选方法。",
+        "explanation": "选择方法之前，先确认已知条件和求解目标是什么。",
     }
 
 
@@ -401,8 +427,10 @@ def _normalize_socratic_question(result: dict, language: str, current_step: int)
     if isinstance(options, list):
         normalized_options = [str(option).strip() for option in options if str(option).strip()]
 
-    if len(normalized_options) < 4:
+    if len(normalized_options) < 2:
         normalized_options = fallback["options"]
+    elif len(normalized_options) > 5:
+        normalized_options = normalized_options[:5]
 
     correct_index = result.get("correct_index", fallback["correct_index"])
     if not isinstance(correct_index, int) or not 0 <= correct_index < len(normalized_options):
@@ -752,20 +780,29 @@ Problem analysis:
                 else f"\n当前节点上下文：\n{current_node_context}\n"
             )
 
+        q_type_name, q_type_desc = _pick_question_type(current_step, english)
+
         if english:
             system_prompt = """You are a professional math tutor AI who guides students with the Socratic method.
 
 Your job:
 1. Generate one guidance question for the student's current step.
-2. The question must help the student decide the next move instead of revealing the answer directly.
-3. Provide 4 options (A/B/C/D). Exactly one option should be the best next step. The others should reflect common mistakes, premature calculation, or giving up.
-4. Prepare encouraging feedback for the correct choice and a gentle hint for an incorrect choice.
-5. Respond in English.
+2. The question must help the student think — never reveal the answer directly.
+3. Provide 2-4 options (A/B/C/D). ALL options must be plausible, well-reasoned thinking directions.
+4. Option requirements:
+   - Every option must be a thoughtful, logical approach a student might realistically choose
+   - One option is the optimal path; the others are viable but suboptimal, roundabout, or incomplete
+   - Distractors should reflect genuine student misconceptions — wrong formula, overlooked condition, incorrect operation order, premature calculation
+   - NEVER include "give up", "guess randomly", "skip", "I don't know" or any defeatist option
+   - NEVER include absurd or irrelevant options
+   - Each option must describe a specific thought or action, not a vague attitude
+5. Prepare encouraging feedback for the correct choice and a gentle hint for incorrect choices (explain why that path is less optimal, not just "wrong").
+6. Respond in English.
 
 Return strict JSON only:
 {
   "question": "Guiding question",
-  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+  "options": ["A. ...", "B. ...", "C. ..."],
   "correct_index": 0,
   "success_feedback": "Encouraging feedback for the correct choice",
   "error_feedback": "Gentle hint for an incorrect choice",
@@ -773,30 +810,39 @@ Return strict JSON only:
 }
 
 Requirements:
-- Make the question specific to the current step.
-- Keep options pedagogically meaningful.
+- Make the question specific to the current step, not generic.
+- Every option should make the student pause and think before choosing.
+- Feedback should be insightful, helping students understand trade-offs between options.
 - Do not include any text outside the JSON."""
             user_prompt = f"""Math problem: {problem}
 Current progress: step {current_step + 1} of about {total_steps}
+Question type: {q_type_name} — {q_type_desc}
 {parsed_info}{current_node_text}
 Conversation history:
 {history_text}
 
-Generate the Socratic question for this step."""
+Generate the Socratic question for this step. The question type is "{q_type_name}" — design the question and options accordingly."""
         else:
             system_prompt = """你是一个专业的数学教育AI助手，擅长使用苏格拉底式教学法引导学生思考。
 
 你的任务是：
 1. 根据学生的当前进度和回答历史，生成一个引导性的问题。
-2. 问题应该帮助学生思考下一步该做什么，而不是直接给出答案。
-3. 提供4个选项（A/B/C/D），其中一个是当前最合理的思路，其他选项体现常见误区、过早计算或放弃态度。
-4. 对正确选项准备鼓励性反馈，对错误选项准备温和提示。
-5. 用中文回答。
+2. 问题应该帮助学生思考，而不是直接给出答案。
+3. 提供2-4个选项（A/B/C/D），所有选项都必须是合理的、有逻辑的思考方向。
+4. 选项要求：
+   - 每个选项都必须是认真思考后可能得出的合理思路
+   - 一个是最优路径，其余是可行但次优、绕远或有局限的路径
+   - 干扰项应反映真实的学生常见思维——如选错公式、忽略条件、计算顺序错误、过早代入
+   - 禁止出现"放弃"、"随便猜"、"跳过"、"不做了"等消极选项
+   - 禁止出现与题目无关的荒谬选项
+   - 每个选项要描述具体的思考或操作，而非笼统态度
+5. 对正确选项准备鼓励性反馈，对错误选项解释为什么这条思路不如最优的（不要只说"错了"）。
+6. 用中文回答。
 
 返回严格的JSON格式：
 {
   "question": "引导性问题",
-  "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
+  "options": ["A. ...", "B. ...", "C. ..."],
   "correct_index": 0,
   "success_feedback": "选择正确时的鼓励性反馈",
   "error_feedback": "选择错误时的温和提示",
@@ -805,16 +851,17 @@ Generate the Socratic question for this step."""
 
 注意：
 - 问题要具体到当前步骤，不要太笼统。
-- 错误选项要反映学生常见的错误思维。
-- 反馈要有启发性，帮助学生理解为什么对或错。
+- 每个选项都应让学生需要认真思考才能区分优劣。
+- 反馈要有启发性，帮助学生理解各选项的利弊。
 - 只返回JSON，不要其他文字。"""
             user_prompt = f"""数学题目：{problem}
 当前进度：第{current_step + 1}步（共约{total_steps}步）
+提问类型：{q_type_name}——{q_type_desc}
 {parsed_info}{current_node_text}
 历史对话：
 {history_text}
 
-请为这一步生成苏格拉底式提问。"""
+请为这一步生成苏格拉底式提问。注意：提问类型是「{q_type_name}」，请按照这个类型来设计问题和选项。"""
 
         response = await self.chat_completion(
             [
