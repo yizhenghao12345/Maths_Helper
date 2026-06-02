@@ -19,7 +19,7 @@ from models import (
 )
 from session_store import session_store
 from problem_parser import parse_problem
-from question_generator import generate_question, _get_questions_for_problem
+from question_generator import generate_question, _get_questions_for_problem, _get_total_steps
 from ocr_service import extract_text_from_base64
 from ai_service import ai_service
 from console_routes import router as console_router
@@ -102,7 +102,7 @@ async def submit_problem(request: SubmitProblemRequest):
                 problem=request.problem,
                 history=[],
                 current_step=0,
-                total_steps=3,
+                total_steps=_get_total_steps(session),
                 language=language,
                 session_id=session_id,
             )
