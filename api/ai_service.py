@@ -33,6 +33,11 @@ PROVIDER_PRESETS = {
         "base_url": "https://api.deepseek.com/v1",
         "models": ["deepseek-v4-flash", "deepseek-chat", "deepseek-coder", "deepseek-reasoner"],
     },
+    "minimax": {
+        "name": "MiniMax",
+        "base_url": "https://api.minimaxi.com/v1",
+        "models": ["MiniMax-M3", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"],
+    },
     "zhipu": {
         "name": "智谱AI (GLM)",
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
@@ -575,6 +580,8 @@ class AIService:
 
         try:
             if self.provider == "openai":
+                result = await self._call_openai(messages, temperature, max_tokens, selected_model)
+            elif self.provider == "minimax":
                 result = await self._call_openai(messages, temperature, max_tokens, selected_model)
             elif self.provider == "qwen":
                 result = await self._call_qwen(messages, temperature, max_tokens, selected_model)

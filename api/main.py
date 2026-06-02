@@ -195,6 +195,6 @@ async def recognize_image(file: UploadFile = File(...)):
 
     image_bytes = await file.read()
     base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
-    text = extract_text_from_base64(base64_data)
+    text = await extract_text_from_base64(base64_data)
 
     return {"text": text}
