@@ -34,6 +34,9 @@ class SubmitProblemRequest(BaseModel):
     problem: str
     problemType: Optional[str] = None
     language: Optional[str] = "zh-CN"
+    # OCR 阶段预解析结果（可选）：若已填充则提交时跳过后台 AI 解析
+    parsed_problem: Optional[dict[str, Any]] = None
+    first_question: Optional[dict[str, Any]] = None
 
 
 class SubmitProblemResponse(BaseModel):

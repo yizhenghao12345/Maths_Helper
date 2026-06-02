@@ -1,26 +1,33 @@
 import base64
+import json
 import os
 import io
 import httpx
 from ai_service import ai_service
 
-async def extract_text_from_base64(base64_data: str, language: str = "zh-CN") -> str:
+
+async def extract_text_from_base64(
+    base64_data: str,
+    language: str = "zh-CN",
+) -> dict:
     """
-    优先使用多模态大模型进行高精度 OCR 与几何解析，降级至本地 Tesseract OCR。
+    优先使用多模态大模型进行高精度 OCR 与几何解析。
+    AI 路径：一次调用同时返回
+      - text: 完整题目文字描述（用于填入文本框）
+      - parsed_problem: 结构化题目分析（可供 /problem/submit 直接使用）
+      - first_question: 第一道苏格拉底引导题（含选项、反馈）
+    降级路径（Tesseract）：仅返回 text，parsed_problem/first_question 为 None。
     """
-    # 提取纯 base64 数据以备本地 OCR 降级使用
     raw_base64 = base64_data
     if "," in base64_data:
         raw_base64 = base64_data.split(",")[1]
 
     # 1. 尝试使用多模态大模型进行高精度识别
     try:
-        # 优先读取 OCR 专属环境变量，如果不存在则使用全局 AI 服务配置
         ocr_provider = os.getenv("OCR_PROVIDER") or ai_service.provider
         ocr_api_key = os.getenv("OCR_API_KEY") or ai_service.api_key
         ocr_base_url = os.getenv("OCR_BASE_URL") or ai_service.base_url
-        
-        # 智能匹配支持的多模态模型
+
         ocr_model = os.getenv("OCR_MODEL")
         if not ocr_model:
             if ocr_provider == "minimax":
@@ -30,83 +37,130 @@ async def extract_text_from_base64(base64_data: str, language: str = "zh-CN") ->
             elif ocr_provider == "qwen":
                 ocr_model = "qwen-vl-max"
             else:
-                ocr_model = ai_service.model  # 降级使用全局模型配置
+                ocr_model = ai_service.model
 
-        # 校验是否具备调用多模态大模型的 API Key，且该提供商属于我们支持的 OpenAI 兼容多模态格式
         if ocr_api_key and ocr_provider in ["minimax", "openai", "qwen", "custom"]:
-            text = await _multimodal_ocr(
+            result = await _multimodal_ocr_full(
                 base64_data=base64_data,
-                provider=ocr_provider,
                 api_key=ocr_api_key,
                 base_url=ocr_base_url,
                 model=ocr_model,
-                language=language
+                language=language,
             )
-            if text:
-                return text
+            if result.get("text"):
+                return result
     except Exception as e:
         print(f"大模型多模态 OCR 解析失败: {e}，尝试降级到本地 Tesseract OCR。")
 
-    # 2. 降级为本地 Tesseract OCR
+    # 2. 降级为本地 Tesseract OCR（仅返回文字）
     try:
         image_bytes = base64.b64decode(raw_base64)
-        return _simple_ocr(image_bytes)
+        text = _simple_ocr(image_bytes)
+        return {"text": text, "parsed_problem": None, "first_question": None}
     except Exception as e:
-        return f"降级本地 OCR 失败: {str(e)}"
+        return {"text": f"降级本地 OCR 失败: {str(e)}", "parsed_problem": None, "first_question": None}
 
 
-async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_url: str, model: str, language: str = "zh-CN") -> str:
+async def _multimodal_ocr_full(
+    base64_data: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+    language: str = "zh-CN",
+) -> dict:
     """
-    通过多模态模型解析题目与几何图象
+    通过多模态模型一次完成：
+      1. 识别图片中的题目文字（text）
+      2. 结构化解析题目（parsed_problem）
+      3. 生成第一道苏格拉底引导问题（first_question）
+    返回格式：{"text": str, "parsed_problem": dict | None, "first_question": dict | None}
     """
     if not base64_data.startswith("data:image"):
-        # 默认假设是 png 图片，补齐头部
         base64_data = f"data:image/png;base64,{base64_data}"
 
     if language == "en-US":
         prompt = (
-            "You are a high-precision math problem recognition assistant specialized in Chinese and English math textbook problems.\n"
-            "Follow these steps strictly:\n\n"
-            "【Step 1 — Recognize the problem text】\n"
-            "Read all text visible in the image (including text below or beside the figure). "
-            "Output it verbatim, using LaTeX syntax for all math expressions (e.g., $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n\n"
-            "【Step 2 — Describe the geometric figure (if present)】\n"
-            "If there is a geometric diagram, describe it in the following order:\n"
-            "  a. Figure type (e.g., triangle, quadrilateral) and its vertex labels (e.g., △ABC with A at top, B at bottom-left, C at bottom-right).\n"
-            "  b. All labeled interior/boundary points and their locations (e.g., 'D and E lie on AC, dividing it into three equal parts AD=DE=EC').\n"
-            "  c. All line segments or rays drawn inside the figure and the intersection points they create (e.g., 'BD and AG intersect at M; BE and AF intersect at N').\n"
-            "  d. Any shaded, colored, or highlighted regions and their boundary vertices (e.g., 'Quadrilateral MGFN is shaded in blue').\n"
-            "  e. Any known numerical values shown in or around the figure.\n\n"
-            "【Step 3 — State the question】\n"
-            "Clearly state what is being asked (e.g., 'Find the area of the shaded region').\n\n"
-            "Output format: combine all three steps into one coherent problem statement. "
-            "Do NOT include section headers in the output. Do NOT add any opening remarks or extra explanation."
+            "You are a high-precision math problem recognition and analysis assistant.\n"
+            "Given the math problem image, complete ALL THREE tasks in ONE response and return ONLY a single JSON object.\n\n"
+            "【Task 1 — Recognize problem text】\n"
+            "Read all visible text (including text below/beside the figure). "
+            "Use LaTeX for all math expressions (e.g., $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
+            "If a geometric figure is present, describe it after the text:\n"
+            "  a. Figure type and vertex labels with positions (e.g., △ABC, A at top, B at bottom-left, C at bottom-right).\n"
+            "  b. All labeled interior/boundary points and their location relationships.\n"
+            "  c. All drawn line segments and the intersection points they create.\n"
+            "  d. Any shaded/colored regions and their boundary vertices.\n\n"
+            "【Task 2 — Structured problem analysis】\n"
+            "Analyze the recognized problem and fill the parsed_problem fields.\n\n"
+            "【Task 3 — First Socratic question】\n"
+            "Generate ONE guiding question to help the student start thinking (Socratic method, step 1). "
+            "Provide 2-4 options (A/B/C/D), all plausible. One is optimal; others are common misconceptions. "
+            "Never reveal the answer directly.\n\n"
+            "Return ONLY this JSON (no markdown, no extra text):\n"
+            "{\n"
+            '  "text": "Full problem text with geometric description",\n'
+            '  "parsed_problem": {\n'
+            '    "problem_type": "equation|geometry|general|algebra|function",\n'
+            '    "title": "Short problem title",\n'
+            '    "known_conditions": ["condition 1", "condition 2"],\n'
+            '    "goal": "What to find",\n'
+            '    "key_concepts": ["concept 1", "concept 2"],\n'
+            '    "suggested_steps": ["step 1", "step 2", "step 3"]\n'
+            "  },\n"
+            '  "first_question": {\n'
+            '    "question": "Guiding question",\n'
+            '    "options": ["A. ...", "B. ...", "C. ..."],\n'
+            '    "correct_index": 0,\n'
+            '    "success_feedback": "Encouraging feedback",\n'
+            '    "error_feedback": "Gentle hint for wrong choice",\n'
+            '    "explanation": "Brief explanation"\n'
+            "  }\n"
+            "}"
         )
     else:
         prompt = (
-            "你是一个高精度的数学题目识别助手，专门处理中小学及竞赛数学题目（含文字题干与几何图形）。\n"
-            "请按以下步骤严格执行：\n\n"
-            "【第一步 — 识别题目文字】\n"
-            "读取图片中所有可见文字（包括图形下方或旁边的文字说明），原文转录。\n"
-            "所有数学符号与公式请使用 LaTeX 语法输出，例如 $AD=DE=EC$、$S_{\\triangle ABC}=1$。\n\n"
-            "【第二步 — 描述几何图形（如有）】\n"
-            "若图中存在几何图形，请按如下顺序描述：\n"
-            "  a. 图形类型及各顶点标注与位置（例如：△ABC，A 在顶部，B 在左下，C 在右下）。\n"
-            "  b. 图形内部或边上的所有标注点及其位置关系（例如：D、E 在 AC 上，将 AC 三等分，满足 $AD=DE=EC$）。\n"
-            "  c. 图形内部所有线段/射线的连接关系及其交点（例如：连接 BD 和 BE，连接 AG 和 AF；BE 与 AG 交于点 M，BE 与 AF 交于点 N）。\n"
-            "  d. 图中标有颜色（阴影、填充）的区域及其顶点（例如：四边形 MGFN 为蓝色阴影区域）。\n"
-            "  e. 图中或图旁标注的任何已知数值。\n\n"
-            "【第三步 — 明确求解目标】\n"
-            "清晰说明题目要求解什么（例如：求阴影部分的面积）。\n\n"
-            "输出格式：将以上三步合并为一段连贯的题目描述，直接输出，不要在输出中包含步骤标题，也不要加任何开场白或解释说明。"
+            "你是一个高精度的数学题目识别与分析助手，专门处理中小学及竞赛数学题目。\n"
+            "请对图片中的数学题目一次性完成以下三项任务，仅返回一个 JSON 对象。\n\n"
+            "【任务一 — 识别题目文字】\n"
+            "读取图片中所有可见文字（含图形下方或旁边的说明），使用 LaTeX 语法输出数学符号（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
+            "若图中存在几何图形，请在文字之后按顺序描述：\n"
+            "  a. 图形类型及各顶点标注与位置（如：△ABC，A 在顶部，B 在左下，C 在右下）。\n"
+            "  b. 图形内部或边上的所有标注点及位置关系（如：D、E 在 AC 上将其三等分，满足 $AD=DE=EC$）。\n"
+            "  c. 图形内部所有线段的连接关系及其产生的交点（如：BD 与 AG 交于 M，BE 与 AF 交于 N）。\n"
+            "  d. 图中标有颜色或阴影的区域及其顶点（如：蓝色阴影区域为四边形 MGFN）。\n\n"
+            "【任务二 — 结构化题目解析】\n"
+            "分析识别出的题目，填写 parsed_problem 各字段。\n\n"
+            "【任务三 — 生成第一道苏格拉底引导问题】\n"
+            "基于题目生成一道引导学生开始思考的问题（苏格拉底式，第一步）。\n"
+            "提供 2-4 个选项（A/B/C/D），所有选项都是合理的思考方向：一个最优，其余反映常见思维误区。\n"
+            "禁止直接给出答案或解题步骤。\n\n"
+            "仅返回以下 JSON（不要 markdown 代码块，不要多余文字）：\n"
+            "{\n"
+            '  "text": "完整题目文字（含几何图形描述）",\n'
+            '  "parsed_problem": {\n'
+            '    "problem_type": "equation|geometry|general|algebra|function",\n'
+            '    "title": "题目简短标题",\n'
+            '    "known_conditions": ["已知条件1", "已知条件2"],\n'
+            '    "goal": "求解目标",\n'
+            '    "key_concepts": ["知识点1", "知识点2"],\n'
+            '    "suggested_steps": ["步骤1", "步骤2", "步骤3"]\n'
+            "  },\n"
+            '  "first_question": {\n'
+            '    "question": "引导性问题",\n'
+            '    "options": ["A. ...", "B. ...", "C. ..."],\n'
+            '    "correct_index": 0,\n'
+            '    "success_feedback": "选择正确时的鼓励性反馈",\n'
+            '    "error_feedback": "选择错误时的温和提示",\n'
+            '    "explanation": "这一步的简短说明"\n'
+            "  }\n"
+            "}"
         )
 
     headers = {
         "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
-    # 构造 OpenAI 标准多模态 payload
     payload = {
         "model": model,
         "messages": [
@@ -116,23 +170,53 @@ async def _multimodal_ocr(base64_data: str, provider: str, api_key: str, base_ur
                     {"type": "text", "text": prompt},
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": base64_data
-                        }
-                    }
-                ]
+                        "image_url": {"url": base64_data},
+                    },
+                ],
             }
         ],
         "temperature": 0.2,
-        "max_tokens": 2000
+        "max_tokens": 2500,
     }
 
     url = f"{base_url}/chat/completions"
-    async with httpx.AsyncClient(timeout=35.0) as client:
+    async with httpx.AsyncClient(timeout=45.0) as client:
         response = await client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        raw = data["choices"][0]["message"]["content"].strip()
+
+    return _parse_ocr_response(raw)
+
+
+def _parse_ocr_response(raw: str) -> dict:
+    """
+    解析多模态模型的 JSON 返回，健壮处理各种格式。
+    始终保证返回 {"text": str, "parsed_problem": dict|None, "first_question": dict|None}。
+    """
+    # 去除可能包裹的 markdown 代码块
+    text = raw
+    if "```" in text:
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+
+    try:
+        json_start = text.find("{")
+        json_end = text.rfind("}") + 1
+        if json_start >= 0 and json_end > json_start:
+            obj = json.loads(text[json_start:json_end])
+            if isinstance(obj, dict) and obj.get("text"):
+                return {
+                    "text": str(obj.get("text", "")).strip(),
+                    "parsed_problem": obj.get("parsed_problem") if isinstance(obj.get("parsed_problem"), dict) else None,
+                    "first_question": obj.get("first_question") if isinstance(obj.get("first_question"), dict) else None,
+                }
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # JSON 解析失败：将整个原始内容作为 text 返回
+    return {"text": raw.strip(), "parsed_problem": None, "first_question": None}
 
 
 def _simple_ocr(image_bytes: bytes) -> str:
@@ -141,7 +225,7 @@ def _simple_ocr(image_bytes: bytes) -> str:
         import pytesseract
 
         image = Image.open(io.BytesIO(image_bytes))
-        text = pytesseract.image_to_string(image, lang='chi_sim+eng')
+        text = pytesseract.image_to_string(image, lang="chi_sim+eng")
         return text.strip()
     except ImportError:
         return "未安装OCR依赖。请运行: pip install pytesseract Pillow，并安装Tesseract-OCR引擎。"

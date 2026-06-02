@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Upload, Image, X, Loader2, Sparkles } from 'lucide-react'
-import { submitProblem, recognizeImage } from '@/api'
+import { submitProblem, recognizeImage, type OcrResult } from '@/api'
 import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
 
@@ -15,6 +15,8 @@ const ProblemInput = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [isRecognizing, setIsRecognizing] = useState(false)
+  // OCR 阶段的预解析缓存（AI 路径有效，降级时为 null）
+  const [ocrCache, setOcrCache] = useState<Pick<OcrResult, 'parsed_problem' | 'first_question'> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const setSessionId = useStore((state) => state.setSessionId)
@@ -32,6 +34,7 @@ const ProblemInput = () => {
     }
 
     setImageFile(file)
+    setOcrCache(null) // 换图后清空旧缓存
     const reader = new FileReader()
     reader.onload = (event) => {
       setImagePreview(event.target?.result as string)
@@ -50,6 +53,8 @@ const ProblemInput = () => {
       const result = await recognizeImage(imageFile, language)
       if (result.text) {
         setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
+        // 缓存预解析结果（AI 路径时有值）
+        setOcrCache({ parsed_problem: result.parsed_problem, first_question: result.first_question })
       } else {
         setError(t.input.noTextRecognized)
       }
@@ -79,7 +84,13 @@ const ProblemInput = () => {
     setLoadingStage('submitting')
 
     try {
-      const response = await submitProblem(problem, undefined, language)
+      const response = await submitProblem(
+        problem,
+        undefined,
+        language,
+        ocrCache?.parsed_problem ?? null,
+        ocrCache?.first_question ?? null,
+      )
       setLoadingStage('thinking')
       resetDeduction()
       setSessionId(response.sessionId)
