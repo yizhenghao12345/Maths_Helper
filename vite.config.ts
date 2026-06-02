@@ -8,7 +8,7 @@ export default defineConfig({
     sourcemap: 'hidden',
   },
   server: {
-    port: 545,
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

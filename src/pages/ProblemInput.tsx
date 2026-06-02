@@ -92,7 +92,8 @@ const ProblemInput = () => {
         setIsLoading(false)
         navigate('/deduction')
       }, 2000)
-    } catch {
+    } catch (e) {
+      console.error('handleSubmit catch:', e)
       setError(t.input.submitError)
       setIsLoading(false)
     }

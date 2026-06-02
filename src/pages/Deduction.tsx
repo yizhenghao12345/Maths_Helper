@@ -58,7 +58,7 @@ const Deduction = () => {
       {/* Mobile: both components always mounted, CSS toggles visibility */}
       <div className="flex-1 min-h-0 overflow-hidden sm:hidden relative">
         <div className={`absolute inset-0 ${activeTab === 'flow' ? 'block' : 'hidden'}`}>
-          <DeductionFlow />
+          <DeductionFlow visible={activeTab === 'flow'} />
         </div>
         <div className={`absolute inset-0 ${activeTab === 'question' ? 'block' : 'hidden'}`}>
           <QuestionPanel />

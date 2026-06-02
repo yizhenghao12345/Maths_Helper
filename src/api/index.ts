@@ -12,7 +12,9 @@ export async function submitProblem(
   })
 
   if (!response.ok) {
-    throw new Error('提交题目失败')
+    const errorText = await response.text().catch(() => '')
+    console.error('submitProblem failed:', response.status, errorText)
+    throw new Error(`提交题目失败: ${response.status} ${errorText}`)
   }
 
   return response.json()
