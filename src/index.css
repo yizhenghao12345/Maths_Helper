@@ -79,3 +79,15 @@ html, body, #root {
     transform: scale(0.98);
   }
 }
+
+#trae-badge-plugin,A
+.trae-badge,
+.trae-badge--dark,
+.trae-badge--bottom-right {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
