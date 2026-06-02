@@ -32,9 +32,36 @@ async def cleanup_sessions():
         session_store.cleanup_expired()
 
 
+async def _parse_problem_in_background(session):
+    try:
+        session.parsed_problem = await ai_service.parse_problem(
+            session.problem,
+            session_id=session.session_id,
+        )
+        session.save()
+        return session.parsed_problem
+    except Exception as e:
+        print(f"AI后台解析题目失败，继续使用快模型追问: {e}")
+        return None
+    finally:
+        session.parsed_problem_task = None
+
+
+def _start_background_parse(session):
+    if not ai_service.enabled or session.parsed_problem is not None:
+        return
+
+    task = getattr(session, "parsed_problem_task", None)
+    if task is not None and not task.done():
+        return
+
+    session.parsed_problem_task = asyncio.create_task(_parse_problem_in_background(session))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    ai_service.load_persisted_config()
     task = asyncio.create_task(cleanup_sessions())
     yield
     task.cancel()
@@ -65,15 +92,10 @@ async def submit_problem(request: SubmitProblemRequest):
 
     first_question = None
     first_options = None
+    current_question_data = None
 
     if ai_service.enabled:
-        try:
-            session.parsed_problem = await ai_service.parse_problem(
-                request.problem,
-                session_id=session_id,
-            )
-        except Exception as e:
-            print(f"AI解析题目失败，继续使用默认结构: {e}")
+        _start_background_parse(session)
 
         try:
             question_data = await ai_service.generate_socratic_question(
@@ -81,10 +103,10 @@ async def submit_problem(request: SubmitProblemRequest):
                 history=[],
                 current_step=0,
                 total_steps=3,
-                parsed_problem=session.parsed_problem,
                 language=language,
                 session_id=session_id,
             )
+            current_question_data = question_data
             first_question = question_data.get("question")
             first_options = question_data.get("options")
         except Exception as e:
@@ -93,8 +115,11 @@ async def submit_problem(request: SubmitProblemRequest):
     if not first_question:
         default_questions = _get_questions_for_problem(request.problem, language)
         if default_questions:
+            current_question_data = default_questions[0]
             first_question = default_questions[0]["question"]
             first_options = default_questions[0]["options"]
+
+    session.current_question_data = current_question_data
 
     session.save()
 
@@ -117,7 +142,13 @@ async def answer_question(request: QuestionRequest):
         session.language = request.language
 
     history_len_before = len(getattr(session, "question_history", []))
-    response = await generate_question(session, request.userAnswer, request.currentNodeId)
+    response = await generate_question(
+        session,
+        request.userAnswer,
+        request.currentNodeId,
+        request.currentQuestion,
+        request.currentOptions,
+    )
 
     if response.nextNodes:
         session.nodes.extend(response.nextNodes)
@@ -152,6 +183,8 @@ async def health_check():
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,
+        "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
+        "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
     }
 
 

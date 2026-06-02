@@ -25,6 +25,8 @@ class LoginRequest(BaseModel):
 class AIConfigRequest(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
+    fast_model: Optional[str] = None
+    slow_model: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
 
@@ -62,6 +64,8 @@ async def health(user=Depends(get_current_console_user)):
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,
+        "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
+        "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
         "ai_base_url": ai_service.base_url if ai_service.enabled else None,
         "db_size": db_size,
         "session_count": session_count,
@@ -173,22 +177,45 @@ async def get_ai_config(user=Depends(get_current_console_user)):
 async def update_ai_config(
     request: AIConfigRequest, user=Depends(get_current_console_user)
 ):
+    previous_model = ai_service.model
     if request.provider is not None:
         ai_service.provider = request.provider.lower()
         os.environ["AI_PROVIDER"] = request.provider
+        db.set_config("ai_provider", request.provider)
     if request.model is not None:
         ai_service.model = request.model
         os.environ["AI_MODEL"] = request.model
+        db.set_config("ai_model", request.model)
+        if ai_service.fast_model == previous_model:
+            ai_service.fast_model = request.model
+            os.environ["AI_FAST_MODEL"] = request.model
+            db.set_config("ai_fast_model", request.model)
+        if ai_service.slow_model == previous_model:
+            ai_service.slow_model = request.model
+            os.environ["AI_SLOW_MODEL"] = request.model
+            db.set_config("ai_slow_model", request.model)
+    if request.fast_model is not None:
+        ai_service.fast_model = request.fast_model
+        os.environ["AI_FAST_MODEL"] = request.fast_model
+        db.set_config("ai_fast_model", request.fast_model)
+    if request.slow_model is not None:
+        ai_service.slow_model = request.slow_model
+        os.environ["AI_SLOW_MODEL"] = request.slow_model
+        db.set_config("ai_slow_model", request.slow_model)
     if request.api_key is not None:
         ai_service.api_key = request.api_key
         os.environ["AI_API_KEY"] = request.api_key
         ai_service.enabled = bool(request.api_key)
+        db.set_config("ai_api_key", request.api_key)
     if request.base_url is not None:
         ai_service.base_url = request.base_url
         os.environ["AI_BASE_URL"] = request.base_url
+        db.set_config("ai_base_url", request.base_url)
     return {
         "provider": ai_service.provider,
         "model": ai_service.model,
+        "fast_model": ai_service.fast_model,
+        "slow_model": ai_service.slow_model,
         "enabled": ai_service.enabled,
         "base_url": ai_service.base_url,
         "api_key_masked": mask_api_key(ai_service.api_key),

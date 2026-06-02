@@ -1,3 +1,4 @@
+from typing import Optional
 from models import MindNode, MindEdge, QuestionResponse, Position, NodeData
 import uuid
 from ai_service import ai_service
@@ -6,7 +7,29 @@ MAX_CONSECUTIVE_ERRORS = 2
 TOTAL_STEPS = 3
 
 
-async def generate_question(session, user_answer: str, current_node_id: str) -> QuestionResponse:
+def _adopt_background_parsed_problem(session):
+    if getattr(session, "parsed_problem", None) is not None:
+        return
+
+    task = getattr(session, "parsed_problem_task", None)
+    if task is None or not task.done():
+        return
+
+    try:
+        session.parsed_problem = task.result()
+    except Exception:
+        session.parsed_problem = None
+    finally:
+        session.parsed_problem_task = None
+
+
+async def generate_question(
+    session,
+    user_answer: str,
+    current_node_id: str,
+    current_question_text: Optional[str] = None,
+    current_options: Optional[list[str]] = None,
+) -> QuestionResponse:
     if not hasattr(session, "consecutive_errors"):
         session.consecutive_errors = 0
     if not hasattr(session, "question_history"):
@@ -15,10 +38,22 @@ async def generate_question(session, user_answer: str, current_node_id: str) -> 
         session.exploration_nodes = []
     if not hasattr(session, "language"):
         session.language = "zh-CN"
+    if not hasattr(session, "current_question_data"):
+        session.current_question_data = None
+    if not hasattr(session, "parsed_problem_task"):
+        session.parsed_problem_task = None
+
+    _adopt_background_parsed_problem(session)
 
     if ai_service.enabled:
         try:
-            return await _generate_ai_question(session, user_answer, current_node_id)
+            return await _generate_ai_question(
+                session,
+                user_answer,
+                current_node_id,
+                current_question_text,
+                current_options,
+            )
         except Exception as e:
             print(f"AI服务调用失败，使用默认逻辑: {e}")
             return _generate_default_question(session, user_answer)
@@ -26,24 +61,33 @@ async def generate_question(session, user_answer: str, current_node_id: str) -> 
     return _generate_default_question(session, user_answer)
 
 
-async def _generate_ai_question(session, user_answer: str, current_node_id: str) -> QuestionResponse:
+async def _generate_ai_question(
+    session,
+    user_answer: str,
+    current_node_id: str,
+    current_question_text: Optional[str] = None,
+    current_options: Optional[list[str]] = None,
+) -> QuestionResponse:
     language = _get_language(session)
-    current_question = await ai_service.generate_socratic_question(
-        problem=session.problem,
-        history=getattr(session, "question_history", []),
-        current_step=session.current_step,
-        total_steps=TOTAL_STEPS,
-        parsed_problem=getattr(session, "parsed_problem", None),
-        language=language,
-        current_node_context=_get_current_node_context(session, current_node_id),
-        session_id=session.session_id,
-    )
+    texts = _get_texts(language)
+    current_question = _get_current_question_data(session)
+    if current_question is None:
+        current_question = await ai_service.generate_socratic_question(
+            problem=session.problem,
+            history=getattr(session, "question_history", []),
+            current_step=session.current_step,
+            total_steps=TOTAL_STEPS,
+            parsed_problem=getattr(session, "parsed_problem", None),
+            language=language,
+            current_node_context=_get_current_node_context(session, current_node_id),
+            session_id=session.session_id,
+        )
+        session.current_question_data = current_question
 
     options = current_question.get("options", ["A", "B", "C", "D"])
     correct_index = current_question.get("correct_index", 0)
     correct_letter = chr(65 + correct_index) if 0 <= correct_index < len(options) else "A"
     selected_option_text = _get_selected_option_text(options, user_answer)
-    texts = _get_texts(language)
 
     if user_answer == correct_letter:
         session.consecutive_errors = 0
@@ -96,6 +140,7 @@ async def _generate_ai_question(session, user_answer: str, current_node_id: str)
 
         if response.isCompleted:
             session.is_completed = True
+            session.current_question_data = None
             response.finalSolution = await ai_service.generate_final_solution(
                 session.problem,
                 session.question_history,
@@ -114,6 +159,7 @@ async def _generate_ai_question(session, user_answer: str, current_node_id: str)
             current_node_context=_get_node_context_text(new_node),
             session_id=session.session_id,
         )
+        session.current_question_data = next_question
         response.nextQuestion = next_question.get("question")
         response.options = next_question.get("options")
         return response
@@ -167,6 +213,7 @@ async def _generate_ai_question(session, user_answer: str, current_node_id: str)
             current_node_context=_get_node_context_text(dead_end_node),
             session_id=session.session_id,
         )
+        session.current_question_data = next_question
 
         response = QuestionResponse(
             isCorrect=False,
@@ -222,6 +269,7 @@ async def _generate_ai_question(session, user_answer: str, current_node_id: str)
         current_node_context=_get_node_context_text(exploration_node),
         session_id=session.session_id,
     )
+    session.current_question_data = next_question
     response = QuestionResponse(
         isCorrect=False,
         feedback=feedback,
@@ -258,7 +306,7 @@ def _generate_default_question(session, user_answer: str) -> QuestionResponse:
             finalSolution=_generate_final_solution(session.problem, language),
         )
 
-    question_data = questions[current_step]
+    question_data = _get_current_question_data(session) or questions[current_step]
     selected_option_text = _get_selected_option_text(question_data["options"], user_answer)
     is_correct = user_answer == question_data["correct"]
 
@@ -313,7 +361,10 @@ def _generate_default_question(session, user_answer: str) -> QuestionResponse:
 
         if response.isCompleted:
             session.is_completed = True
+            session.current_question_data = None
             response.finalSolution = _generate_final_solution(session.problem, language)
+        elif next_step < len(questions):
+            session.current_question_data = questions[next_step]
 
         return response
 
@@ -355,6 +406,7 @@ def _generate_default_question(session, user_answer: str) -> QuestionResponse:
         )
 
         session.consecutive_errors = 0
+        session.current_question_data = question_data
         response = QuestionResponse(
             isCorrect=False,
             feedback=feedback,
@@ -407,6 +459,7 @@ def _generate_default_question(session, user_answer: str) -> QuestionResponse:
         options=question_data["options"],
         nextNodes=[exploration_node],
     )
+    session.current_question_data = question_data
 
     last_node_id = _get_last_active_node_id(session)
     if last_node_id:
@@ -451,6 +504,18 @@ def _node_attr(node, key: str, default=None):
     if isinstance(node, dict):
         return node.get(key, default)
     return getattr(node, key, default)
+
+
+def _get_current_question_data(session) -> Optional[dict]:
+    data = getattr(session, "current_question_data", None)
+    if not isinstance(data, dict):
+        return None
+
+    question = data.get("question")
+    options = data.get("options")
+    if isinstance(question, str) and question and isinstance(options, list) and options:
+        return data
+    return None
 
 
 def _get_node_context_text(node) -> str:

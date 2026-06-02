@@ -22,12 +22,14 @@ export async function answerQuestion(
   sessionId: string,
   userAnswer: string,
   currentNodeId: string,
+  currentQuestion?: string | null,
+  currentOptions?: string[] | null,
   language = 'zh-CN'
 ): Promise<QuestionResponse> {
   const response = await fetch('/api/question/answer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, userAnswer, currentNodeId, language }),
+    body: JSON.stringify({ sessionId, userAnswer, currentNodeId, currentQuestion, currentOptions, language }),
   })
 
   if (!response.ok) {
