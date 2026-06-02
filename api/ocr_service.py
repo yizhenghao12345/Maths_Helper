@@ -2,6 +2,7 @@ import base64
 import json
 import os
 import io
+import re
 import httpx
 from ai_service import ai_service
 
@@ -189,13 +190,25 @@ async def _multimodal_ocr_full(
     return _parse_ocr_response(raw)
 
 
+def _strip_think_tags(text: str) -> str:
+    """
+    移除模型输出中的 <think>...</think> 推理块。
+    适用于 MiniMax-M3 / DeepSeek-R1 等带思维链的模型。
+    """
+    # 贪婪匹配：去掉所有 <think>...</think>（含跨行）
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
 def _parse_ocr_response(raw: str) -> dict:
     """
     解析多模态模型的 JSON 返回，健壮处理各种格式。
     始终保证返回 {"text": str, "parsed_problem": dict|None, "first_question": dict|None}。
     """
-    # 去除可能包裹的 markdown 代码块
-    text = raw
+    # 1. 先剥离思维链 <think>...</think>
+    text = _strip_think_tags(raw)
+
+    # 2. 去除可能包裹的 markdown 代码块
     if "```" in text:
         lines = text.split("\n")
         lines = [l for l in lines if not l.strip().startswith("```")]
@@ -207,16 +220,18 @@ def _parse_ocr_response(raw: str) -> dict:
         if json_start >= 0 and json_end > json_start:
             obj = json.loads(text[json_start:json_end])
             if isinstance(obj, dict) and obj.get("text"):
+                # 对 text 字段也做一次思维链清洗（防止模型把 <think> 写进 JSON 内容）
+                clean_text = _strip_think_tags(str(obj.get("text", "")))
                 return {
-                    "text": str(obj.get("text", "")).strip(),
+                    "text": clean_text,
                     "parsed_problem": obj.get("parsed_problem") if isinstance(obj.get("parsed_problem"), dict) else None,
                     "first_question": obj.get("first_question") if isinstance(obj.get("first_question"), dict) else None,
                 }
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # JSON 解析失败：将整个原始内容作为 text 返回
-    return {"text": raw.strip(), "parsed_problem": None, "first_question": None}
+    # JSON 解析失败：将剥离思维链后的内容作为 text 返回
+    return {"text": text, "parsed_problem": None, "first_question": None}
 
 
 def _simple_ocr(image_bytes: bytes) -> str:
