@@ -4,7 +4,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -19,7 +19,7 @@ from models import (
 )
 from session_store import session_store
 from problem_parser import parse_problem
-from question_generator import generate_question, _get_questions_for_problem
+from question_generator import generate_question, _get_questions_for_problem, _get_total_steps
 from ocr_service import extract_text_from_base64
 from ai_service import ai_service
 from console_routes import router as console_router
@@ -32,14 +32,41 @@ async def cleanup_sessions():
         session_store.cleanup_expired()
 
 
+async def _parse_problem_in_background(session):
+    try:
+        session.parsed_problem = await ai_service.parse_problem(
+            session.problem,
+            session_id=session.session_id,
+        )
+        session.save()
+        return session.parsed_problem
+    except Exception as e:
+        print(f"AI后台解析题目失败，继续使用快模型追问: {e}")
+        return None
+    finally:
+        session.parsed_problem_task = None
+
+
+def _start_background_parse(session):
+    if not ai_service.enabled or session.parsed_problem is not None:
+        return
+
+    task = getattr(session, "parsed_problem_task", None)
+    if task is not None and not task.done():
+        return
+
+    session.parsed_problem_task = asyncio.create_task(_parse_problem_in_background(session))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    ai_service.load_persisted_config()
     task = asyncio.create_task(cleanup_sessions())
     yield
     task.cancel()
 
-app = FastAPI(title="Math Thinking Trainer API", version="0.0.4", lifespan=lifespan)
+app = FastAPI(title="Math Thinking Trainer API", version="0.1.3", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,26 +92,21 @@ async def submit_problem(request: SubmitProblemRequest):
 
     first_question = None
     first_options = None
+    current_question_data = None
 
     if ai_service.enabled:
-        try:
-            session.parsed_problem = await ai_service.parse_problem(
-                request.problem,
-                session_id=session_id,
-            )
-        except Exception as e:
-            print(f"AI解析题目失败，继续使用默认结构: {e}")
+        _start_background_parse(session)
 
         try:
             question_data = await ai_service.generate_socratic_question(
                 problem=request.problem,
                 history=[],
                 current_step=0,
-                total_steps=3,
-                parsed_problem=session.parsed_problem,
+                total_steps=_get_total_steps(session),
                 language=language,
                 session_id=session_id,
             )
+            current_question_data = question_data
             first_question = question_data.get("question")
             first_options = question_data.get("options")
         except Exception as e:
@@ -93,9 +115,11 @@ async def submit_problem(request: SubmitProblemRequest):
     if not first_question:
         default_questions = _get_questions_for_problem(request.problem, language)
         if default_questions:
+            current_question_data = default_questions[0]
             first_question = default_questions[0]["question"]
             first_options = default_questions[0]["options"]
 
+    session.current_question_data = current_question_data
     session.save()
 
     return SubmitProblemResponse(
@@ -117,7 +141,13 @@ async def answer_question(request: QuestionRequest):
         session.language = request.language
 
     history_len_before = len(getattr(session, "question_history", []))
-    response = await generate_question(session, request.userAnswer, request.currentNodeId)
+    response = await generate_question(
+        session,
+        request.userAnswer,
+        request.currentNodeId,
+        request.currentQuestion,
+        request.currentOptions,
+    )
 
     if response.nextNodes:
         session.nodes.extend(response.nextNodes)
@@ -146,22 +176,39 @@ async def answer_question(request: QuestionRequest):
 
 @app.get("/health")
 async def health_check():
+    # 确定 OCR 使用的模型（优先环境变量 OCR_MODEL，其次按供应商默认）
+    ocr_model = (
+        os.getenv("OCR_MODEL")
+        or (
+            "MiniMax-M3" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "minimax"
+            else "gpt-4o-mini" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "openai"
+            else "qwen-vl-max" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "qwen"
+            else ai_service.model
+        )
+        if ai_service.enabled else "Tesseract"
+    )
     return {
         "status": "ok",
-        "version": "0.0.4",
+        "version": "0.1.3",
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,
+        "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
+        "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
+        "ocr_model": ocr_model,
     }
 
 
 @app.post("/ocr/recognize")
-async def recognize_image(file: UploadFile = File(...)):
+async def recognize_image(
+    file: UploadFile = File(...),
+    language: str = Form("zh-CN"),
+):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="仅支持图片文件")
 
     image_bytes = await file.read()
     base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
-    text = extract_text_from_base64(base64_data)
-
-    return {"text": text}
+    result = await extract_text_from_base64(base64_data, language)
+    # 只返回识别的文本内容
+    return {"text": result.get("text", "")}

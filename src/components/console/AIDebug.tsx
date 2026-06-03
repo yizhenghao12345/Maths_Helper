@@ -38,12 +38,15 @@ const AIDebug = () => {
   const [searchQuery, setSearchQuery] = useState('')
 
   const [editProvider, setEditProvider] = useState('')
-  const [editModel, setEditModel] = useState('')
+  const [editFastModel, setEditFastModel] = useState('')
+  const [editSlowModel, setEditSlowModel] = useState('')
   const [editApiKey, setEditApiKey] = useState('')
   const [editBaseUrl, setEditBaseUrl] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [isCustomModel, setIsCustomModel] = useState(false)
-  const [customModelName, setCustomModelName] = useState('')
+  const [isCustomFastModel, setIsCustomFastModel] = useState(false)
+  const [isCustomSlowModel, setIsCustomSlowModel] = useState(false)
+  const [customFastModelName, setCustomFastModelName] = useState('')
+  const [customSlowModelName, setCustomSlowModelName] = useState('')
 
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null)
   const [isTesting, setIsTesting] = useState(false)
@@ -66,19 +69,27 @@ const AIDebug = () => {
 
   const handleEdit = () => {
     if (fullConfig) {
+      const nextFastModel = fullConfig.fast_model || fullConfig.model
+      const nextSlowModel = fullConfig.slow_model || nextFastModel
       setEditProvider(fullConfig.provider)
-      setEditModel(fullConfig.model)
+      setEditFastModel(nextFastModel)
+      setEditSlowModel(nextSlowModel)
       setEditApiKey('')
       setEditBaseUrl(fullConfig.base_url)
-      setIsCustomModel(false)
-      setCustomModelName('')
+      setIsCustomFastModel(false)
+      setIsCustomSlowModel(false)
+      setCustomFastModelName('')
+      setCustomSlowModelName('')
     } else {
       setEditProvider('')
-      setEditModel('')
+      setEditFastModel('')
+      setEditSlowModel('')
       setEditApiKey('')
       setEditBaseUrl('')
-      setIsCustomModel(false)
-      setCustomModelName('')
+      setIsCustomFastModel(false)
+      setIsCustomSlowModel(false)
+      setCustomFastModelName('')
+      setCustomSlowModelName('')
     }
     setTestResult(null)
     setIsEditing(true)
@@ -94,33 +105,54 @@ const AIDebug = () => {
     setTestResult(null)
     if (value === 'custom') {
       setEditBaseUrl('')
-      setEditModel('')
-      setIsCustomModel(true)
-      setCustomModelName('')
+      setEditFastModel('')
+      setEditSlowModel('')
+      setIsCustomFastModel(true)
+      setIsCustomSlowModel(true)
+      setCustomFastModelName('')
+      setCustomSlowModelName('')
     } else if (presets[value]) {
       setEditBaseUrl(presets[value].base_url)
       const models = presets[value].models || []
       if (models.length > 0) {
-        setEditModel(models[0])
-        setIsCustomModel(false)
-        setCustomModelName('')
+        setEditFastModel(models[0])
+        setEditSlowModel(models[0])
+        setIsCustomFastModel(false)
+        setIsCustomSlowModel(false)
+        setCustomFastModelName('')
+        setCustomSlowModelName('')
       } else {
-        setEditModel('')
-        setIsCustomModel(true)
-        setCustomModelName('')
+        setEditFastModel('')
+        setEditSlowModel('')
+        setIsCustomFastModel(true)
+        setIsCustomSlowModel(true)
+        setCustomFastModelName('')
+        setCustomSlowModelName('')
       }
     }
   }
 
-  const handleModelSelect = (value: string) => {
+  const handleModelSelect = (target: 'fast' | 'slow', value: string) => {
     if (value === '__custom__') {
-      setIsCustomModel(true)
-      setCustomModelName('')
-      setEditModel('')
+      if (target === 'fast') {
+        setIsCustomFastModel(true)
+        setCustomFastModelName('')
+        setEditFastModel('')
+      } else {
+        setIsCustomSlowModel(true)
+        setCustomSlowModelName('')
+        setEditSlowModel('')
+      }
     } else {
-      setIsCustomModel(false)
-      setEditModel(value)
-      setCustomModelName('')
+      if (target === 'fast') {
+        setIsCustomFastModel(false)
+        setEditFastModel(value)
+        setCustomFastModelName('')
+      } else {
+        setIsCustomSlowModel(false)
+        setEditSlowModel(value)
+        setCustomSlowModelName('')
+      }
     }
     setTestResult(null)
   }
@@ -129,7 +161,7 @@ const AIDebug = () => {
     setIsTesting(true)
     setTestResult(null)
     try {
-      const model = isCustomModel ? customModelName : editModel
+      const model = isCustomFastModel ? customFastModelName : editFastModel
       const result = await testConnection({
         provider: editProvider,
         api_key: editApiKey,
@@ -145,10 +177,13 @@ const AIDebug = () => {
   }
 
   const handleSave = async () => {
-    const model = isCustomModel ? customModelName : editModel
+    const fastModel = isCustomFastModel ? customFastModelName : editFastModel
+    const slowModel = isCustomSlowModel ? customSlowModelName : editSlowModel
     const config: AIConfigUpdate = {
       provider: editProvider,
-      model,
+      model: fastModel,
+      fast_model: fastModel,
+      slow_model: slowModel,
       base_url: editBaseUrl,
     }
     if (editApiKey) {
@@ -191,7 +226,8 @@ const AIDebug = () => {
     )
   }, [aiLogs, searchQuery])
 
-  const activeModel = isCustomModel ? customModelName : editModel
+  const activeFastModel = isCustomFastModel ? customFastModelName : editFastModel
+  const activeSlowModel = isCustomSlowModel ? customSlowModelName : editSlowModel
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -235,6 +271,16 @@ const AIDebug = () => {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{t.console.aiDebug.model}</span>
                       <span className="text-white">{fullConfig.model}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">{t.console.aiDebug.fastModel}</span>
+                      <span className="text-white">{fullConfig.fast_model || fullConfig.model}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">{t.console.aiDebug.slowModel}</span>
+                      <span className="text-white">
+                        {fullConfig.slow_model || fullConfig.fast_model || fullConfig.model}
+                      </span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{t.console.aiDebug.apiKey}</span>
@@ -284,12 +330,12 @@ const AIDebug = () => {
 
               <div>
                 <label className="block text-gray-400 text-sm mb-1">
-                  {t.console.aiDebug.model}
+                  {t.console.aiDebug.fastModel}
                 </label>
                 {currentPresetModels.length > 0 ? (
                   <select
-                    value={isCustomModel ? '__custom__' : editModel}
-                    onChange={(e) => handleModelSelect(e.target.value)}
+                    value={isCustomFastModel ? '__custom__' : editFastModel}
+                    onChange={(e) => handleModelSelect('fast', e.target.value)}
                     className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
                   >
                     <option value="" disabled>
@@ -305,23 +351,69 @@ const AIDebug = () => {
                 ) : (
                   <input
                     type="text"
-                    value={isCustomModel ? customModelName : editModel}
+                    value={isCustomFastModel ? customFastModelName : editFastModel}
                     onChange={(e) => {
-                      if (isCustomModel) {
-                        setCustomModelName(e.target.value)
+                      if (isCustomFastModel) {
+                        setCustomFastModelName(e.target.value)
                       } else {
-                        setEditModel(e.target.value)
+                        setEditFastModel(e.target.value)
                       }
                     }}
                     placeholder={t.console.aiDebug.modelPlaceholder}
                     className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
                   />
                 )}
-                {isCustomModel && currentPresetModels.length > 0 && (
+                {isCustomFastModel && currentPresetModels.length > 0 && (
                   <input
                     type="text"
-                    value={customModelName}
-                    onChange={(e) => setCustomModelName(e.target.value)}
+                    value={customFastModelName}
+                    onChange={(e) => setCustomFastModelName(e.target.value)}
+                    placeholder={t.console.aiDebug.modelPlaceholder}
+                    className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm mt-2"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-gray-400 text-sm mb-1">
+                  {t.console.aiDebug.slowModel}
+                </label>
+                {currentPresetModels.length > 0 ? (
+                  <select
+                    value={isCustomSlowModel ? '__custom__' : editSlowModel}
+                    onChange={(e) => handleModelSelect('slow', e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                  >
+                    <option value="" disabled>
+                      {t.console.aiDebug.modelPlaceholder}
+                    </option>
+                    {currentPresetModels.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                    <option value="__custom__">{t.console.aiDebug.customModel}</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={isCustomSlowModel ? customSlowModelName : editSlowModel}
+                    onChange={(e) => {
+                      if (isCustomSlowModel) {
+                        setCustomSlowModelName(e.target.value)
+                      } else {
+                        setEditSlowModel(e.target.value)
+                      }
+                    }}
+                    placeholder={t.console.aiDebug.modelPlaceholder}
+                    className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                  />
+                )}
+                {isCustomSlowModel && currentPresetModels.length > 0 && (
+                  <input
+                    type="text"
+                    value={customSlowModelName}
+                    onChange={(e) => setCustomSlowModelName(e.target.value)}
                     placeholder={t.console.aiDebug.modelPlaceholder}
                     className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm mt-2"
                   />
@@ -416,7 +508,7 @@ const AIDebug = () => {
                 </button>
                 <button
                   onClick={handleTestConnection}
-                  disabled={isTesting || !editProvider || !activeModel || !editBaseUrl}
+                  disabled={isTesting || !editProvider || !activeFastModel || !editBaseUrl}
                   className="flex items-center gap-1.5 px-3 py-2 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isTesting ? (
@@ -428,7 +520,7 @@ const AIDebug = () => {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!editProvider || !activeModel || !editBaseUrl}
+                  disabled={!editProvider || !activeFastModel || !activeSlowModel || !editBaseUrl}
                   className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t.console.aiDebug.saveConfig}
@@ -480,6 +572,9 @@ const AIDebug = () => {
                         {t.console.aiDebug.provider}
                       </th>
                       <th className="text-left px-4 py-3 text-gray-400 text-xs font-medium">
+                        {t.console.aiDebug.reference}
+                      </th>
+                      <th className="text-left px-4 py-3 text-gray-400 text-xs font-medium">
                         {t.console.aiDebug.duration}
                       </th>
                       <th className="text-left px-4 py-3 text-gray-400 text-xs font-medium">
@@ -515,6 +610,19 @@ const AIDebug = () => {
                           </td>
                           <td className="px-4 py-3 text-gray-300 text-xs">{log.method}</td>
                           <td className="px-4 py-3 text-gray-300 text-xs">{log.provider}</td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs ${
+                                log.used_parsed_problem
+                                  ? 'bg-blue-900/30 text-blue-300'
+                                  : 'bg-gray-700 text-gray-300'
+                              }`}
+                            >
+                              {log.used_parsed_problem
+                                ? t.console.aiDebug.referenced
+                                : t.console.aiDebug.notReferenced}
+                            </span>
+                          </td>
                           <td className="px-4 py-3 text-gray-300 text-xs">{log.duration_ms}ms</td>
                           <td className="px-4 py-3">
                             <span
@@ -533,8 +641,26 @@ const AIDebug = () => {
                         </tr>
                         {expandedLogId === log.id && (
                           <tr key={`${log.id}-detail`}>
-                            <td colSpan={7} className="px-6 py-4 bg-gray-900/50">
+                            <td colSpan={8} className="px-6 py-4 bg-gray-900/50">
                               <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="text-gray-400">{t.console.aiDebug.reference}:</span>
+                                  <span className={log.used_parsed_problem ? 'text-blue-300' : 'text-gray-300'}>
+                                    {log.used_parsed_problem
+                                      ? t.console.aiDebug.referenced
+                                      : t.console.aiDebug.notReferenced}
+                                  </span>
+                                </div>
+                                {log.parsed_problem_title && (
+                                  <div>
+                                    <p className="text-gray-400 text-xs mb-1">
+                                      {t.console.aiDebug.referenceTitle}:
+                                    </p>
+                                    <p className="text-gray-300 text-xs bg-gray-800 rounded-lg p-3">
+                                      {log.parsed_problem_title}
+                                    </p>
+                                  </div>
+                                )}
                                 <div>
                                   <p className="text-gray-400 text-xs mb-1">Request:</p>
                                   <pre className="text-gray-300 text-xs bg-gray-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">

@@ -13,6 +13,7 @@ class Session:
         self.problem = problem
         self.language = language
         self.parsed_problem = None
+        self.current_question_data = None
         self.current_step = 0
         self.nodes = []
         self.edges = []
@@ -21,6 +22,7 @@ class Session:
         self.consecutive_errors = 0
         self.question_history = []
         self.exploration_nodes = []
+        self.parsed_problem_task = None
         self.created_at = time.time()
         self.last_active = time.time()
 
@@ -36,6 +38,7 @@ class Session:
             problem=self.problem,
             language=self.language,
             parsed_problem=self.parsed_problem,
+            current_question_data=self.current_question_data,
             current_step=self.current_step,
             nodes=self.nodes,
             edges=self.edges,
@@ -47,6 +50,7 @@ class Session:
     def from_db(cls, data: dict) -> "Session":
         session = cls(data["id"], data["problem"], data.get("language", "zh-CN"))
         session.parsed_problem = data.get("parsed_problem")
+        session.current_question_data = data.get("current_question_data")
         session.current_step = data.get("current_step", 0)
         session.nodes = data.get("nodes", [])
         session.edges = data.get("edges", [])
@@ -54,6 +58,7 @@ class Session:
         session.consecutive_errors = data.get("consecutive_errors", 0)
         session.question_history = _load_question_history(data["id"])
         session.exploration_nodes = []
+        session.parsed_problem_task = None
         return session
 
 

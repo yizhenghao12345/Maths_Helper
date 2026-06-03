@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Send, Upload, Image, X, Loader2, Sparkles } from 'lucide-react'
-import { submitProblem, recognizeImage } from '@/api'
+import { submitProblem, recognizeImage, fetchHealth } from '@/api'
 import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
 
@@ -15,7 +15,15 @@ const ProblemInput = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [isRecognizing, setIsRecognizing] = useState(false)
+  // 页面加载时从 /health 获取当前 OCR 模型名
+  const [ocrModel, setOcrModel] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    fetchHealth()
+      .then((info) => setOcrModel(info.ocr_model))
+      .catch(() => { /* 静默失败 */ })
+  }, [])
 
   const setSessionId = useStore((state) => state.setSessionId)
   const setNodesAndEdges = useStore((state) => state.setNodesAndEdges)
@@ -47,7 +55,7 @@ const ProblemInput = () => {
     setError('')
 
     try {
-      const result = await recognizeImage(imageFile)
+      const result = await recognizeImage(imageFile, language)
       if (result.text) {
         setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
       } else {
@@ -92,7 +100,8 @@ const ProblemInput = () => {
         setIsLoading(false)
         navigate('/deduction')
       }, 2000)
-    } catch {
+    } catch (e) {
+      console.error('handleSubmit catch:', e)
       setError(t.input.submitError)
       setIsLoading(false)
     }
@@ -185,7 +194,7 @@ const ProblemInput = () => {
             )}
 
             <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-3 mb-3">
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
@@ -194,6 +203,12 @@ const ProblemInput = () => {
                   <Upload className="w-4 h-4" />
                   <span>{t.input.uploadImage}</span>
                 </button>
+                {/* 页面加载即显示当前 OCR 模型 */}
+                {ocrModel && (
+                  <span className="text-xs text-gray-400 px-2 py-1 bg-gray-50 rounded-full border border-gray-100">
+                    识别模型：{ocrModel}
+                  </span>
+                )}
                 <input
                   ref={fileInputRef}
                   type="file"

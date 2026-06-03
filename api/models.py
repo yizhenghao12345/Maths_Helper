@@ -48,6 +48,8 @@ class QuestionRequest(BaseModel):
     sessionId: str
     userAnswer: str
     currentNodeId: str
+    currentQuestion: Optional[str] = None
+    currentOptions: Optional[list[str]] = None
     language: Optional[str] = None
 
 

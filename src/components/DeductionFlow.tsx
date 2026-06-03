@@ -121,12 +121,13 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], measuredNodeSizes: No
   return layoutedNodes
 }
 
-const DeductionFlow = () => {
+const DeductionFlow = ({ visible = true }: { visible?: boolean }) => {
   const nodes = useStore((state) => state.deduction.nodes)
   const edges = useStore((state) => state.deduction.edges)
   const [measuredNodeSizes, setMeasuredNodeSizes] = useState<NodeSizeMap>({})
   const containerRef = useRef<HTMLDivElement>(null)
   const [fitViewKey, setFitViewKey] = useState(0)
+  const prevVisibleRef = useRef(visible)
 
   useEffect(() => {
     setMeasuredNodeSizes((prev) => {
@@ -216,6 +217,14 @@ const DeductionFlow = () => {
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     console.log('Node clicked:', node.data)
   }, [])
+
+  useEffect(() => {
+    if (visible && !prevVisibleRef.current) {
+      const timer = setTimeout(() => setFitViewKey((k) => k + 1), 50)
+      return () => clearTimeout(timer)
+    }
+    prevVisibleRef.current = visible
+  }, [visible])
 
   useEffect(() => {
     const triggerFitView = () => setFitViewKey((k) => k + 1)

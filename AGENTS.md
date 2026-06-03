@@ -32,7 +32,7 @@ curl http://localhost:8000/health   # 健康检查（含 AI 状态）
 
 - **Git 分支策略**：**禁止直接在 `main` 分支上开发或提交代码。** 所有代码修改必须在 `dev` 分支上进行，通过 PR 合并到 `main`。如果当前在 `main` 分支，必须先切换到 `dev` 分支（`git checkout dev`）再开始工作。
 
-- **Git 提交信息**：使用中文，简洁明了，避免复杂词汇；并带上版本名，例如 `feat(v0.0.4): ...`（见 `.trae/rules/git-commit-message.md`）。
+- **Git 提交信息**：使用中文，简洁明了，避免复杂词汇；并带上版本名，例如 `feat(v0.1.3): ...`（见 `.trae/rules/git-commit-message.md`）。
 - **国际化**：所有面向用户的文案需同时维护 `src/i18n/zh-CN.ts` 和 `src/i18n/en-US.ts`，不要硬编码中文。
 - **类型检查**：提交前运行 `npm run check` 和 `npm run lint` 保证通过。
 - **AI 降级**：后端涉及 AI 的功能必须保留无 Key 时的默认逻辑分支，确保不配置 AI 也能运行。

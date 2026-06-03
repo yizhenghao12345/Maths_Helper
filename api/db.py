@@ -63,6 +63,8 @@ def init_db():
                 provider TEXT,
                 model TEXT,
                 method TEXT,
+                used_parsed_problem BOOLEAN DEFAULT 0,
+                parsed_problem_title TEXT,
                 request_summary TEXT,
                 response_summary TEXT,
                 duration_ms INTEGER,
@@ -77,6 +79,7 @@ def init_db():
             );
         """)
         _ensure_session_columns(conn)
+        _ensure_ai_log_columns(conn)
         conn.commit()
     finally:
         conn.close()
@@ -88,6 +91,21 @@ def _ensure_session_columns(conn: sqlite3.Connection):
     }
     required_columns = {
         "language": "ALTER TABLE sessions ADD COLUMN language TEXT DEFAULT 'zh-CN'",
+        "current_question_data": "ALTER TABLE sessions ADD COLUMN current_question_data TEXT",
+    }
+
+    for column, ddl in required_columns.items():
+        if column not in existing_columns:
+            conn.execute(ddl)
+
+
+def _ensure_ai_log_columns(conn: sqlite3.Connection):
+    existing_columns = {
+        row["name"] for row in conn.execute("PRAGMA table_info(ai_logs)").fetchall()
+    }
+    required_columns = {
+        "used_parsed_problem": "ALTER TABLE ai_logs ADD COLUMN used_parsed_problem BOOLEAN DEFAULT 0",
+        "parsed_problem_title": "ALTER TABLE ai_logs ADD COLUMN parsed_problem_title TEXT",
     }
 
     for column, ddl in required_columns.items():
@@ -137,7 +155,7 @@ def update_session(session_id: str, **kwargs):
             sets = []
             vals = []
             for key, value in kwargs.items():
-                if key in ("nodes", "edges", "parsed_problem"):
+                if key in ("nodes", "edges", "parsed_problem", "current_question_data"):
                     sets.append(f"{key} = ?")
                     vals.append(json.dumps(value, default=_json_serial) if value is not None else None)
                 elif key == "is_completed":
@@ -241,6 +259,8 @@ def add_ai_log(
     provider: str,
     model: str,
     method: str,
+    used_parsed_problem: bool,
+    parsed_problem_title: Optional[str],
     request_summary: str,
     response_summary: str,
     duration_ms: int,
@@ -251,12 +271,14 @@ def add_ai_log(
         conn = _get_conn()
         try:
             conn.execute(
-                "INSERT INTO ai_logs (session_id, provider, model, method, request_summary, response_summary, duration_ms, success, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO ai_logs (session_id, provider, model, method, used_parsed_problem, parsed_problem_title, request_summary, response_summary, duration_ms, success, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     session_id,
                     provider,
                     model,
                     method,
+                    1 if used_parsed_problem else 0,
+                    parsed_problem_title,
                     request_summary,
                     response_summary,
                     duration_ms,
@@ -372,6 +394,9 @@ def _row_to_session_dict(row: sqlite3.Row) -> dict:
     d["edges"] = json.loads(d["edges"]) if d["edges"] else []
     d["parsed_problem"] = (
         json.loads(d["parsed_problem"]) if d["parsed_problem"] else None
+    )
+    d["current_question_data"] = (
+        json.loads(d["current_question_data"]) if d.get("current_question_data") else None
     )
     d["is_completed"] = bool(d["is_completed"])
     return d

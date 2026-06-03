@@ -1,14 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from "vite-tsconfig-paths";
-import { traeBadgePlugin } from 'vite-plugin-trae-solo-badge';
 
 export default defineConfig({
   build: {
     sourcemap: 'hidden',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-xyflow': ['@xyflow/react'],
+          'vendor-recharts': ['recharts'],
+        },
+      },
+    },
   },
   server: {
-    port: 545,
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
@@ -18,22 +26,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    react({
-      babel: {
-        plugins: [
-          'react-dev-locator',
-        ],
-      },
-    }),
-    traeBadgePlugin({
-      variant: 'dark',
-      position: 'bottom-right',
-      prodOnly: true,
-      clickable: true,
-      clickUrl: 'https://www.trae.ai/solo?showJoin=1',
-      autoTheme: true,
-      autoThemeTarget: '#root'
-    }), 
+    react(),
     tsconfigPaths()
   ],
 })

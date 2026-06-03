@@ -1,18 +1,22 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import Home from '@/pages/Home'
-import ProblemInput from '@/pages/ProblemInput'
-import Deduction from '@/pages/Deduction'
-import Console from '@/pages/Console'
+
+const Home = lazy(() => import('@/pages/Home'))
+const ProblemInput = lazy(() => import('@/pages/ProblemInput'))
+const Deduction = lazy(() => import('@/pages/Deduction'))
+const Console = lazy(() => import('@/pages/Console'))
 
 export default function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/input" element={<ProblemInput />} />
-        <Route path="/deduction" element={<Deduction />} />
-        <Route path="/console" element={<Console />} />
-      </Routes>
+      <Suspense>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/input" element={<ProblemInput />} />
+          <Route path="/deduction" element={<Deduction />} />
+          <Route path="/console" element={<Console />} />
+        </Routes>
+      </Suspense>
     </Router>
   )
 }

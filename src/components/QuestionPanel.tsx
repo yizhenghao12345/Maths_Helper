@@ -33,6 +33,8 @@ const QuestionPanel = () => {
         deduction.sessionId,
         answer.charAt(0),
         currentNodeId,
+        deduction.currentQuestion,
+        deduction.currentOptions,
         language
       )
 
