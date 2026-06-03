@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Monitor, Bot, BarChart3, LogOut, Home, Brain } from 'lucide-react'
+import { LayoutDashboard, Monitor, Bot, BarChart3, Settings, LogOut, Home, Brain } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
 import { useConsoleStore } from '@/store/useConsoleStore'
 import { logoutConsole } from '@/api/console'
@@ -9,12 +9,14 @@ import Dashboard from '@/components/console/Dashboard'
 import Sessions from '@/components/console/Sessions'
 import AIDebug from '@/components/console/AIDebug'
 import Analytics from '@/components/console/Analytics'
+import SettingsPage from '@/components/console/Settings'
 
 const tabs = [
   { key: 'dashboard', icon: LayoutDashboard },
   { key: 'sessions', icon: Monitor },
   { key: 'aiDebug', icon: Bot },
   { key: 'analytics', icon: BarChart3 },
+  { key: 'settings', icon: Settings },
 ] as const
 
 type TabKey = (typeof tabs)[number]['key']
@@ -57,6 +59,7 @@ const Console = () => {
       case 'sessions': return <Sessions />
       case 'aiDebug': return <AIDebug />
       case 'analytics': return <Analytics />
+      case 'settings': return <SettingsPage />
     }
   }
 
