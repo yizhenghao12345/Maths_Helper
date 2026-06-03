@@ -1,4 +1,4 @@
-# Math Thinking Trainer v0.1.3
+# Math Thinking Trainer v0.1.4
 
 [中文文档](./README.md)
 
@@ -8,10 +8,21 @@
 
 In the AI era, students rely heavily on problem-solving apps, leading to the frequent "understand at a glance, fail when solving" phenomenon. Students lack genuine problem-solving thinking. This project aims to visualize and interactively guide students through the thinking process, training mathematical logical abilities from the ground up.
 
+## v0.1.4 Highlights
+
+- 🧠 **MiniMax-M3 Multimodal OCR** - Added geometry and formula recognition support with fallback guarantee
+- 🔀 **Socratic Questioning Triple Upgrade** - A+B+C question strategy combinations
+- ⚙️ **Dynamic Step Counting** - Session total steps calculated in real-time for more accurate progress display
+
 ## v0.1.3 Highlights
 
+- 🤖 **3-in-1 AI Pipeline** - OCR + parsing + first question completed in one API call, reducing wait time
+- 🧹 **MiniMax-M3 Optimization** - Filters `<think>` reasoning blocks, improves geometry shapes, shadow areas and multi-language support
+- 📦 **JS Bundle Route-Level Splitting** - Optimized loading performance, removed Trae badge
+
+## v0.1.2 Highlights
+
 - 📱 **Mobile Adaptation** - Fully responsive layout optimization, supporting mobile phones and tablets
-- 🧹 **Code Cleanup** - Optimized .gitignore configuration, ignoring Python cache files
 
 ## v0.0.4 Highlights
 
@@ -139,7 +150,7 @@ Frontend runs at http://localhost:5173
 3. **Verify AI Status**
 ```bash
 curl http://localhost:8000/health
-# Returns: {"status":"ok","version":"0.1.3","ai_enabled":true,"ai_provider":"qwen"}
+# Returns: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"qwen"}
 ```
 
 ## Project Structure

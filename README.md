@@ -1,4 +1,4 @@
-# 数学思维训练助手 v0.1.3
+# 数学思维训练助手 v0.1.4
 
 [English Documentation](./README_EN.md)
 
@@ -8,15 +8,21 @@
 
 在AI时代，学生依赖搜题软件，导致"一看就懂，一做就错"的情况频繁发生，而学生自身却缺乏真正的解题思维。本项目旨在通过可视化、互动式引导，让学生看清思考过程，从根源上训练数学逻辑能力。
 
+## v0.1.4 更新亮点
+
+- 🧠 **MiniMax-M3 多模态 OCR** - 新增几何图形与公式识别支持，提供降级保障
+- 🔀 **苏格拉底提问三重升级** - A+B+C 三种提问策略组合
+- ⚙️ **动态步数统计** - session 总步数实时计算，更准确展示进度
+
 ## v0.1.3 更新亮点
 
-- 📱 **移动端适配** - 全面响应式布局优化，支持手机、平板等移动设备访问
-- 🧹 **代码清理** - 优化 .gitignore 配置，忽略 Python 缓存文件
+- 🤖 **三合一 AI 流程** - OCR + 解析 + 首题一次调用完成，减少等待
+- 🧹 **MiniMax-M3 优化** - 过滤 `<think>` 推理块，优化几何图形、阴影区域与多语言支持
+- 📦 **JS Bundle 路由级拆分** - 优化加载性能，移除 Trae 徽章
 
 ## v0.1.2 更新亮点
 
 - 📱 **移动端适配** - 全面响应式布局优化，支持手机、平板等移动设备访问
-- 🧹 **代码清理** - 优化 .gitignore 配置，忽略 Python 缓存文件
 
 ## v0.0.4 更新亮点
 
@@ -144,7 +150,7 @@ npm run dev
 3. **验证 AI 状态**
 ```bash
 curl http://localhost:8000/health
-# 返回: {"status":"ok","version":"0.1.3","ai_enabled":true,"ai_provider":"qwen"}
+# 返回: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"qwen"}
 ```
 
 ## 项目结构
@@ -294,7 +300,7 @@ curl http://localhost:18080/api/health
 | `nginx.conf` | 静态托管 + `/api/` 反代到 :8000 + SPA 回退 |
 | `docker-entrypoint.sh` | 容器启动脚本（uvicorn + nginx） |
 | `docker-compose.dev.yml` | dev 环境编排（`:dev` 镜像 + 18080:80 + 数据卷 + 健康检查） |
-| `docker-compose.prod.yml` | prod 环境编排（`:main` 镜像 + 80:80 + 数据卷 + 健康检查） |
+| `docker-compose.prod.yml` | prod 环境编排（`:main` 镜像 + 28080:80 + 数据卷 + 健康检查） |
 | `.github/workflows/deploy.yml` | GitHub Actions CI/CD 工作流（双环境） |
 | `deploy/README.md` | 服务器初始化与故障排查详细指南 |
 | `.env.example` | 环境变量模板（AI / 控制台密码 / CORS） |
