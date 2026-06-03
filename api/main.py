@@ -94,20 +94,8 @@ async def submit_problem(request: SubmitProblemRequest):
     first_options = None
     current_question_data = None
 
-    # ── 快速路径：OCR 阶段已预解析，直接使用缓存结果 ──────────────────
-    if request.parsed_problem and isinstance(request.parsed_problem, dict):
-        session.parsed_problem = request.parsed_problem
-        session.save()
-
-    if request.first_question and isinstance(request.first_question, dict):
-        current_question_data = request.first_question
-        first_question = request.first_question.get("question")
-        first_options = request.first_question.get("options")
-
-    # ── 标准路径：未预解析时，后台解析 + AI 生成首题 ──────────────────
-    if not first_question and ai_service.enabled:
-        if not session.parsed_problem:
-            _start_background_parse(session)
+    if ai_service.enabled:
+        _start_background_parse(session)
 
         try:
             question_data = await ai_service.generate_socratic_question(
@@ -115,7 +103,6 @@ async def submit_problem(request: SubmitProblemRequest):
                 history=[],
                 current_step=0,
                 total_steps=_get_total_steps(session),
-                parsed_problem=session.parsed_problem,
                 language=language,
                 session_id=session_id,
             )
@@ -125,7 +112,6 @@ async def submit_problem(request: SubmitProblemRequest):
         except Exception as e:
             print(f"AI生成首题失败，使用默认逻辑: {e}")
 
-    # ── 兜底：无 AI 时使用内置默认问题 ──────────────────────────────
     if not first_question:
         default_questions = _get_questions_for_problem(request.problem, language)
         if default_questions:
@@ -211,6 +197,6 @@ async def recognize_image(
 
     image_bytes = await file.read()
     base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
-    # 返回 {text, parsed_problem, first_question}；降级时后两者为 null
+    # 返回 {text: str, model_used: str}
     result = await extract_text_from_base64(base64_data, language)
     return result

@@ -15,8 +15,8 @@ const ProblemInput = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [isRecognizing, setIsRecognizing] = useState(false)
-  // OCR 阶段的预解析缓存（AI 路径有效，降级时为 null）
-  const [ocrCache, setOcrCache] = useState<Pick<OcrResult, 'parsed_problem' | 'first_question'> | null>(null)
+  // 记录本次 OCR 使用的模型名（识别完后展示）
+  const [modelUsed, setModelUsed] = useState<OcrResult['model_used'] | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const setSessionId = useStore((state) => state.setSessionId)
@@ -34,7 +34,7 @@ const ProblemInput = () => {
     }
 
     setImageFile(file)
-    setOcrCache(null) // 换图后清空旧缓存
+    setModelUsed(null) // 换图后清空模型标签
     const reader = new FileReader()
     reader.onload = (event) => {
       setImagePreview(event.target?.result as string)
@@ -53,8 +53,7 @@ const ProblemInput = () => {
       const result = await recognizeImage(imageFile, language)
       if (result.text) {
         setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
-        // 缓存预解析结果（AI 路径时有值）
-        setOcrCache({ parsed_problem: result.parsed_problem, first_question: result.first_question })
+        setModelUsed(result.model_used)
       } else {
         setError(t.input.noTextRecognized)
       }
@@ -84,13 +83,7 @@ const ProblemInput = () => {
     setLoadingStage('submitting')
 
     try {
-      const response = await submitProblem(
-        problem,
-        undefined,
-        language,
-        ocrCache?.parsed_problem ?? null,
-        ocrCache?.first_question ?? null,
-      )
+      const response = await submitProblem(problem, undefined, language)
       setLoadingStage('thinking')
       resetDeduction()
       setSessionId(response.sessionId)
@@ -193,6 +186,12 @@ const ProblemInput = () => {
                   )}
                   {isRecognizing ? t.input.recognizing : t.input.recognizeImage}
                 </button>
+                {/* 识别成功后显示使用的模型 */}
+                {modelUsed && !isRecognizing && (
+                  <span className="text-xs text-gray-400 self-center px-2 py-1 bg-gray-50 rounded-full border border-gray-200">
+                    由 {modelUsed} 识别
+                  </span>
+                )}
               </div>
             )}
 

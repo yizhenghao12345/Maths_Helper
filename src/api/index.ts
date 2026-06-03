@@ -1,25 +1,21 @@
 import type { SubmitProblemResponse, QuestionResponse } from '@/types'
 
-// OCR 返回的三合一结果
+/** OCR 识别返回格式 */
 export interface OcrResult {
   text: string
-  // AI OCR 路径时同步返回，Tesseract 降级时为 null
-  parsed_problem: Record<string, unknown> | null
-  first_question: Record<string, unknown> | null
+  /** 使用的模型名，如 "MiniMax-M3" / "gpt-4o-mini" / "Tesseract" */
+  model_used: string
 }
 
 export async function submitProblem(
   problem: string,
   problemType?: string,
   language = 'zh-CN',
-  // OCR 预解析结果（可选），有则跳过后端 AI 解析 + 首题生成
-  parsed_problem?: Record<string, unknown> | null,
-  first_question?: Record<string, unknown> | null,
 ): Promise<SubmitProblemResponse> {
   const response = await fetch('/api/problem/submit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ problem, problemType, language, parsed_problem, first_question }),
+    body: JSON.stringify({ problem, problemType, language }),
   })
 
   if (!response.ok) {
