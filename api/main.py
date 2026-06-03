@@ -176,6 +176,17 @@ async def answer_question(request: QuestionRequest):
 
 @app.get("/health")
 async def health_check():
+    # 确定 OCR 使用的模型（优先环境变量 OCR_MODEL，其次按供应商默认）
+    ocr_model = (
+        os.getenv("OCR_MODEL")
+        or (
+            "MiniMax-M3" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "minimax"
+            else "gpt-4o-mini" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "openai"
+            else "qwen-vl-max" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "qwen"
+            else ai_service.model
+        )
+        if ai_service.enabled else "Tesseract"
+    )
     return {
         "status": "ok",
         "version": "0.1.3",
@@ -184,6 +195,7 @@ async def health_check():
         "ai_model": ai_service.model if ai_service.enabled else None,
         "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
         "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
+        "ocr_model": ocr_model,
     }
 
 
@@ -197,6 +209,6 @@ async def recognize_image(
 
     image_bytes = await file.read()
     base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
-    # 返回 {text: str, model_used: str}
     result = await extract_text_from_base64(base64_data, language)
-    return result
+    # 只返回识别的文本内容
+    return {"text": result.get("text", "")}

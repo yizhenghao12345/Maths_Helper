@@ -1,10 +1,22 @@
 import type { SubmitProblemResponse, QuestionResponse } from '@/types'
 
-/** OCR 识别返回格式 */
+/** OCR 识别返回格式（只含文字） */
 export interface OcrResult {
   text: string
-  /** 使用的模型名，如 "MiniMax-M3" / "gpt-4o-mini" / "Tesseract" */
-  model_used: string
+}
+
+/** /health 接口返回格式（部分字段） */
+export interface HealthInfo {
+  status: string
+  ai_enabled: boolean
+  ai_model: string | null
+  ocr_model: string | null
+}
+
+export async function fetchHealth(): Promise<HealthInfo> {
+  const response = await fetch('/api/health')
+  if (!response.ok) throw new Error('获取服务信息失败')
+  return response.json()
 }
 
 export async function submitProblem(
