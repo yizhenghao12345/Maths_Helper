@@ -199,6 +199,12 @@ async def health_check():
     }
 
 
+@app.get("/copyright")
+async def get_copyright_public():
+    val = db.get_config("copyright")
+    return {"copyright": val or ""}
+
+
 @app.post("/ocr/recognize")
 async def recognize_image(
     file: UploadFile = File(...),

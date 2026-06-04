@@ -31,6 +31,10 @@ class AIConfigRequest(BaseModel):
     base_url: Optional[str] = None
 
 
+class SettingsRequest(BaseModel):
+    copyright: Optional[str] = None
+
+
 class TestConnectionRequest(BaseModel):
     provider: str
     api_key: str
@@ -51,6 +55,32 @@ async def logout(request: Request, user=Depends(get_current_console_user)):
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     logout_console_token(token)
     return {"message": "已登出"}
+
+
+@router.get("/copyright")
+async def get_copyright():
+    val = db.get_config("copyright")
+    return {"copyright": val or ""}
+
+
+@router.get("/settings")
+async def get_settings(user=Depends(get_current_console_user)):
+    val = db.get_config("copyright")
+    return {
+        "copyright": val or "",
+    }
+
+
+@router.patch("/settings")
+async def update_settings(
+    request: SettingsRequest, user=Depends(get_current_console_user)
+):
+    if request.copyright is not None:
+        db.set_config("copyright", request.copyright)
+    val = db.get_config("copyright")
+    return {
+        "copyright": val or "",
+    }
 
 
 @router.get("/health")

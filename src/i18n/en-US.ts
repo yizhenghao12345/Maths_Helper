@@ -20,6 +20,17 @@ export const enUS: typeof zhCN = {
         description: 'Allow wrong turns with gentle guidance when mistakes happen, helping you find the right direction',
       },
     ],
+    instructions: {
+      title: 'How to Use',
+      buttonLabel: 'Guide',
+      steps: [
+        { step: '1', title: 'Input Problem', desc: 'Enter a math problem, or upload an image for auto text recognition' },
+        { step: '2', title: 'Start Deduction', desc: 'Click the button, system generates a mind map and guided questions' },
+        { step: '3', title: 'Answer Questions', desc: 'Select answers based on guided questions, system creates new nodes' },
+        { step: '4', title: 'Complete Deduction', desc: 'View the complete solution review after finishing all steps' },
+      ],
+      tips: 'Mistakes are welcome - wrong attempts are also recorded to help you understand the right direction',
+    },
   },
   input: {
     backHome: 'Back to Home',
@@ -88,6 +99,7 @@ export const enUS: typeof zhCN = {
       sessions: 'Sessions',
       aiDebug: 'AI Debug',
       analytics: 'Analytics',
+      settings: 'Settings',
     },
     dashboard: {
       serviceStatus: 'Service Status',
@@ -184,6 +196,15 @@ export const enUS: typeof zhCN = {
       steps: 'Steps',
       count: 'Count',
       rate: 'Rate',
+    },
+    settings: {
+      title: 'Site Settings',
+      copyright: 'Copyright',
+      copyrightPlaceholder: 'e.g., © 2025 Your Company. All rights reserved.',
+      copyrightHint: 'Will be displayed at the bottom of the homepage',
+      save: 'Save',
+      saving: 'Saving...',
+      saveSuccess: 'Saved successfully',
     },
     logout: 'Logout',
     backHome: 'Back to Home',

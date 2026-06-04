@@ -18,6 +18,17 @@ export const zhCN = {
         description: '允许走弯路,错误时温和引导,帮助你找到正确方向',
       },
     ],
+    instructions: {
+      title: '使用说明',
+      buttonLabel: '使用指南',
+      steps: [
+        { step: '1', title: '输入题目', desc: '输入数学题目，或上传图片自动识别文字' },
+        { step: '2', title: '开始推演', desc: '点击按钮，系统生成思维导图和引导问题' },
+        { step: '3', title: '回答问题', desc: '根据引导问题选择答案，系统生成新节点' },
+        { step: '4', title: '完成推演', desc: '完成所有步骤后查看完整解题回顾' },
+      ],
+      tips: '允许犯错，错误尝试也会被记录，帮助理解正确方向',
+    },
   },
   input: {
     backHome: '返回首页',
@@ -86,6 +97,7 @@ export const zhCN = {
       sessions: '会话',
       aiDebug: 'AI调试',
       analytics: '分析',
+      settings: '设置',
     },
     dashboard: {
       serviceStatus: '服务状态',
@@ -182,6 +194,15 @@ export const zhCN = {
       steps: '步骤数',
       count: '数量',
       rate: '比率',
+    },
+    settings: {
+      title: '站点设置',
+      copyright: '版权信息',
+      copyrightPlaceholder: '例如: © 2025 Your Company. All rights reserved.',
+      copyrightHint: '将显示在主页底部',
+      save: '保存',
+      saving: '保存中...',
+      saveSuccess: '保存成功',
     },
     logout: '退出登录',
     backHome: '返回首页',

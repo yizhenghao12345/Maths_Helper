@@ -1,10 +1,24 @@
 import { useNavigate } from 'react-router-dom'
-import { Brain, Lightbulb, Target, Languages } from 'lucide-react'
+import { Brain, Lightbulb, Target, Languages, ArrowRight, BookOpen } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
+import { useRef, useState, useEffect } from 'react'
 
 const Home = () => {
   const navigate = useNavigate()
   const { t, toggleLanguage, language } = useI18n()
+  const instructionsRef = useRef<HTMLDivElement>(null)
+  const [copyright, setCopyright] = useState('')
+
+  useEffect(() => {
+    fetch('/copyright')
+      .then((r) => r.json())
+      .then((data) => setCopyright(data.copyright || ''))
+      .catch(() => setCopyright(''))
+  }, [])
+
+  const scrollToInstructions = () => {
+    instructionsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const featureIcons = [Brain, Lightbulb, Target]
 
@@ -39,12 +53,21 @@ const Home = () => {
           <p className="text-base sm:text-xl text-gray-600 max-w-2xl mx-auto mb-6 sm:mb-10 px-4">
             {t.home.subtitle}
           </p>
-          <button
-            onClick={() => navigate('/input')}
-            className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-base sm:text-lg font-semibold rounded-full shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 pulse-animation active:scale-95"
-          >
-            {t.home.startButton}
-          </button>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <button
+              onClick={() => navigate('/input')}
+              className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-base sm:text-lg font-semibold rounded-full shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 pulse-animation active:scale-95"
+            >
+              {t.home.startButton}
+            </button>
+            <button
+              onClick={scrollToInstructions}
+              className="flex items-center gap-2 px-5 py-3 sm:px-6 sm:py-4 bg-white border-2 border-gray-200 text-gray-700 text-base sm:text-lg font-medium rounded-full shadow-md hover:shadow-lg hover:border-blue-300 hover:text-blue-600 transform hover:-translate-y-1 transition-all duration-300 active:scale-95"
+            >
+              <BookOpen className="w-5 h-5" />
+              <span>{t.home.instructions.buttonLabel}</span>
+            </button>
+          </div>
         </section>
 
         <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8">
@@ -68,7 +91,50 @@ const Home = () => {
             )
           })}
         </section>
+
+        {/* Instructions Section */}
+        <section ref={instructionsRef} className="mt-12 sm:mt-20">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center mb-6 sm:mb-10">
+            {t.home.instructions.title}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {t.home.instructions.steps.map((item, index) => (
+              <div
+                key={index}
+                className="relative bg-white rounded-2xl p-5 sm:p-6 shadow-md hover:shadow-lg transition-shadow duration-300"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-sm">
+                    {item.step}
+                  </div>
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800">
+                    {item.title}
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {item.desc}
+                </p>
+                {index < t.home.instructions.steps.length - 1 && (
+                  <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 text-gray-300">
+                    <ArrowRight className="w-6 h-6" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 sm:mt-8 text-center">
+            <p className="text-sm sm:text-base text-gray-500 italic">
+              {t.home.instructions.tips}
+            </p>
+          </div>
+        </section>
       </main>
+
+      {copyright && (
+        <footer className="text-center py-6 text-sm text-gray-400 border-t border-gray-100">
+          {copyright}
+        </footer>
+      )}
     </div>
   )
 }
