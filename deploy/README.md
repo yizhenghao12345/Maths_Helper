@@ -40,7 +40,12 @@ echo "<YOUR_PASSWORD>" | docker login ccr.ccs.tencentyun.com -u <YOUR_USERNAME> 
 
 ## 配置 AI 密钥（在服务器上操作）
 
-`docker-compose.yml` 中已内置 DeepSeek v4 Flash 默认配置（provider、base_url、model），**只需在服务器上配置 `AI_API_KEY`**。
+`docker-compose.yml` 中已内置默认模型配置：
+
+- AI：DeepSeek v4 Flash（`AI_PROVIDER`/`AI_BASE_URL`/`AI_MODEL`）
+- OCR：MiniMax-M3（`OCR_PROVIDER`/`OCR_BASE_URL`/`OCR_MODEL`）
+
+服务器上只需配置对应的 Key（不配 OCR key 会自动降级到本地 Tesseract）。
 
 ```bash
 # SSH 登录服务器后，在各环境目录下创建 .env 文件
@@ -48,12 +53,14 @@ echo "<YOUR_PASSWORD>" | docker login ccr.ccs.tencentyun.com -u <YOUR_USERNAME> 
 # Dev 环境
 cat > /opt/app/dev/.env << 'EOF'
 AI_API_KEY=sk-your-deepseek-api-key-here
+OCR_API_KEY=sk-your-minimax-api-key-here
 CONSOLE_PASSWORD=your-console-password
 EOF
 
 # Prod 环境
 cat > /opt/app/prod/.env << 'EOF'
 AI_API_KEY=sk-your-deepseek-api-key-here
+OCR_API_KEY=sk-your-minimax-api-key-here
 CONSOLE_PASSWORD=your-console-password
 EOF
 ```
@@ -71,6 +78,15 @@ EOF
 | `AI_BASE_URL` | `https://api.deepseek.com/v1` | API 端点 |
 | `AI_MODEL` | `deepseek-v4-flash` | 模型名称（免费额度） |
 | `AI_API_KEY` | （无默认值） | **必须在服务器 .env 中配置** |
+
+### 默认 OCR 配置
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `OCR_PROVIDER` | `minimax` | OCR 提供商 |
+| `OCR_BASE_URL` | `https://api.minimaxi.com/v1` | API 端点 |
+| `OCR_MODEL` | `MiniMax-M3` | 多模态 OCR 模型 |
+| `OCR_API_KEY` | （无默认值） | 可选：不配置则降级到本地 Tesseract |
 
 ## GitHub Secrets 配置
 

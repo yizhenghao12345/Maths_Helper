@@ -10,6 +10,10 @@ services:
       AI_PROVIDER: deepseek
       AI_BASE_URL: https://api.deepseek.com/v1
       AI_MODEL: deepseek-v4-flash
+      # 默认值：MiniMax-M3 多模态 OCR（需在 .env 中配置 OCR_API_KEY；不配则降级到 Tesseract）
+      OCR_PROVIDER: minimax
+      OCR_BASE_URL: https://api.minimaxi.com/v1
+      OCR_MODEL: MiniMax-M3
     ports:
       - "18080:80"
     volumes:

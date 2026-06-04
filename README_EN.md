@@ -4,6 +4,16 @@
 
 > A training tool that helps students see the mathematical thinking process through visual and interactive guidance.
 
+Live Demo: [Dev](https://maths-dev.m1in.com) ｜ [Prod](https://maths.m1in.com)
+
+<img alt="Prod QR Code" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fmaths.m1in.com" width="140" />
+
+## What You Get
+
+- **See the thinking**: visualize the solution process as a step-by-step mind map
+- **Guided reasoning**: Socratic questions lead students to the key ideas
+- **Safe exploration**: wrong attempts are recorded and gently guided back when needed
+
 ## Origin
 
 In the AI era, students rely heavily on problem-solving apps, leading to the frequent "understand at a glance, fail when solving" phenomenon. Students lack genuine problem-solving thinking. This project aims to visualize and interactively guide students through the thinking process, training mathematical logical abilities from the ground up.
@@ -13,6 +23,9 @@ In the AI era, students rely heavily on problem-solving apps, leading to the fre
 - 🧠 **MiniMax-M3 Multimodal OCR** - Added geometry and formula recognition support with fallback guarantee
 - 🔀 **Socratic Questioning Triple Upgrade** - A+B+C question strategy combinations
 - ⚙️ **Dynamic Step Counting** - Session total steps calculated in real-time for more accurate progress display
+
+<details>
+<summary>Highlights from Previous Versions</summary>
 
 ## v0.1.3 Highlights
 
@@ -30,13 +43,15 @@ In the AI era, students rely heavily on problem-solving apps, leading to the fre
 - 🔀 **One-Click Switching** - Language toggle button in the top-right corner for instant switching
 - 🎨 **i18n Architecture** - Lightweight translation system based on React Context
 
+</details>
+
 ## Core Features
 
 - **Visual Thinking Map** - Breaks down problem-solving into multiple thinking nodes, presented graphically
 - **Socratic Questioning** - Guides students to think independently through guided questions
 - **Exploration-Based Learning** - Allows students to take wrong turns with gentle guidance when mistakes happen
 - **Image Recognition** - Upload problem images for automatic text recognition (Tesseract OCR)
-- **AI Smart Assistance** - Integrates LLM APIs (OpenAI / Qwen / Baidu ERNIE) for intelligent parsing and dynamic questioning
+- **AI Smart Assistance** - Integrates LLM APIs (DeepSeek / MiniMax / OpenAI / Qwen / Baidu ERNIE) for intelligent parsing and dynamic questioning
 - **Multi-Problem Support** - Supports equations, geometry proofs, general math problems, and more
 
 ### Mind Map Guide
@@ -71,6 +86,8 @@ In the AI era, students rely heavily on problem-solving apps, leading to the fre
 
 | Provider | Model Example | Notes |
 |----------|---------------|-------|
+| DeepSeek | deepseek-v4-flash, deepseek-reasoner | Requires API Key |
+| MiniMax | MiniMax-M3 | Requires API Key |
 | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4o | Requires API Key |
 | Qwen | qwen-plus, qwen-max | Requires DashScope API Key |
 | ERNIE | ernie-bot-4, ernie-bot-turbo | Requires Baidu Access Token |
@@ -113,20 +130,28 @@ pip install -r api/requirements.txt
    Edit the `.env` file with your API configuration:
 
    ```env
-   # Choose AI provider: openai, qwen, baidu
-   AI_PROVIDER=qwen
+   # Choose AI provider: deepseek, minimax, openai, qwen, baidu
+   AI_PROVIDER=deepseek
 
    # API Key
    AI_API_KEY=your-api-key-here
 
    # Base URL (optional, leave blank for defaults)
+   # DeepSeek: https://api.deepseek.com/v1
+   # MiniMax: https://api.minimaxi.com/v1
    # OpenAI: https://api.openai.com/v1
    # Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1
    # Baidu: https://aip.baidubce.com
-   AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+   AI_BASE_URL=https://api.deepseek.com/v1
 
    # Model name (optional)
-   AI_MODEL=qwen-plus
+   AI_MODEL=deepseek-v4-flash
+
+   # OCR (optional, recommended: MiniMax-M3; without OCR_API_KEY it falls back to local Tesseract)
+   OCR_PROVIDER=minimax
+   OCR_API_KEY=your-ocr-api-key-here
+   OCR_BASE_URL=https://api.minimaxi.com/v1
+   OCR_MODEL=MiniMax-M3
    ```
 
 5. **Install Tesseract-OCR** (optional, for image recognition)
@@ -150,7 +175,7 @@ Frontend runs at http://localhost:5173
 3. **Verify AI Status**
 ```bash
 curl http://localhost:8000/health
-# Returns: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"qwen"}
+# Returns: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"deepseek"}
 ```
 
 ## Project Structure
@@ -163,7 +188,7 @@ Math_Helper/
 │   ├── session_store.py          # Session management (with expiry cleanup)
 │   ├── problem_parser.py         # Problem parsing (returns only problem node)
 │   ├── question_generator.py     # Socratic question generator (exploration + retreat)
-│   ├── ai_service.py             # LLM API service (OpenAI/Qwen/Baidu)
+│   ├── ai_service.py             # LLM API service (multi-provider + fallback)
 │   ├── ocr_service.py            # OCR image text recognition
 │   └── requirements.txt          # Python dependencies
 ├── src/                          # React Frontend
@@ -221,6 +246,22 @@ Click the language button in the top-right corner of the homepage:
 | `/question/answer` | POST | Submit answer, get feedback and new nodes |
 | `/ocr/recognize` | POST | Upload image, return recognized text |
 | `/health` | GET | Health check (including AI status) |
+
+## Deployment (Auto)
+
+- Environments: Dev https://maths-dev.m1in.com / Prod https://maths.m1in.com
+- Auto deploy: pushing to `dev` / `main` triggers build & deploy
+- Details: see [deploy/README.md](./deploy/README.md) (Chinese)
+
+<details>
+<summary>Dev/Prod QR Codes</summary>
+
+| Environment | URL | QR Code |
+|-------------|-----|--------|
+| Dev | https://maths-dev.m1in.com | ![Dev QR Code](https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Fmaths-dev.m1in.com) |
+| Prod | https://maths.m1in.com | ![Prod QR Code](https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Fmaths.m1in.com) |
+
+</details>
 
 ## License
 

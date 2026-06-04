@@ -4,6 +4,16 @@
 
 > 一个通过可视化、互动式引导，帮助学生看清数学思考过程的训练工具。
 
+在线体验： [Dev（开发）](https://maths-dev.m1in.com) ｜ [Prod（生产）](https://maths.m1in.com)
+
+<img alt="Prod 访问二维码" src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=https%3A%2F%2Fmaths.m1in.com" width="140" />
+
+## 你将获得
+
+- **看见思考过程**：把“解题思路”拆成可视化节点，不再只记答案
+- **被引导着思考**：用苏格拉底式提问把关键一步步问出来
+- **允许走弯路**：答错会记录探索路径，并在必要时温和回退
+
 ## 创意来源
 
 在AI时代，学生依赖搜题软件，导致"一看就懂，一做就错"的情况频繁发生，而学生自身却缺乏真正的解题思维。本项目旨在通过可视化、互动式引导，让学生看清思考过程，从根源上训练数学逻辑能力。
@@ -13,6 +23,9 @@
 - 🧠 **MiniMax-M3 多模态 OCR** - 新增几何图形与公式识别支持，提供降级保障
 - 🔀 **苏格拉底提问三重升级** - A+B+C 三种提问策略组合
 - ⚙️ **动态步数统计** - session 总步数实时计算，更准确展示进度
+
+<details>
+<summary>历史版本更新亮点</summary>
 
 ## v0.1.3 更新亮点
 
@@ -30,13 +43,15 @@
 - 🔀 **一键切换** - 右上角语言切换按钮，实时切换界面语言
 - 🎨 **i18n 架构** - 基于 React Context 的轻量级翻译系统
 
+</details>
+
 ## 核心功能
 
 - **思维可视化** - 将解题过程拆解为多个思维节点，以图形化方式呈现
 - **苏格拉底式提问** - 通过引导式提问，培养学生独立思考能力
 - **探索式学习** - 允许学生走弯路，顺着用户的思路生成节点，错误时温和回退提示
 - **图片识别** - 支持上传题目图片，自动识别文字内容（Tesseract OCR）
-- **AI 智能辅助** - 接入大模型 API（支持 OpenAI / 通义千问 / 文心一言），实现智能题目解析和动态提问
+- **AI 智能辅助** - 接入大模型 API（支持 DeepSeek / MiniMax / OpenAI / 通义千问 / 文心一言），实现智能题目解析和动态提问
 - **多题型支持** - 支持方程求解、几何证明、通用数学题等多种题型
 
 ### 思维导图说明
@@ -71,6 +86,8 @@
 
 | 提供商 | 模型示例 | 说明 |
 |--------|----------|------|
+| DeepSeek | deepseek-v4-flash, deepseek-reasoner | 需要 API Key |
+| MiniMax | MiniMax-M3 | 需要 API Key |
 | OpenAI | gpt-3.5-turbo, gpt-4, gpt-4o | 需要 API Key |
 | 通义千问 | qwen-plus, qwen-max | 需要 DashScope API Key |
 | 文心一言 | ernie-bot-4, ernie-bot-turbo | 需要 Baidu Access Token |
@@ -113,20 +130,28 @@ pip install -r api/requirements.txt
    编辑 `.env` 文件，填入你的 API 配置：
 
    ```env
-   # 选择AI提供商: openai, qwen(通义千问), baidu(文心一言)
-   AI_PROVIDER=qwen
+   # 选择AI提供商: deepseek, minimax, openai, qwen(通义千问), baidu(文心一言)
+   AI_PROVIDER=deepseek
 
    # API密钥
    AI_API_KEY=your-api-key-here
 
    # API基础URL (可选，留空使用默认值)
+   # DeepSeek: https://api.deepseek.com/v1
+   # MiniMax: https://api.minimaxi.com/v1
    # OpenAI: https://api.openai.com/v1
    # 通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1
    # 文心一言: https://aip.baidubce.com
-   AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+   AI_BASE_URL=https://api.deepseek.com/v1
 
    # 模型名称 (可选)
-   AI_MODEL=qwen-plus
+   AI_MODEL=deepseek-v4-flash
+
+   # OCR（可选，推荐 MiniMax-M3；不配 OCR_API_KEY 会自动降级到本地 Tesseract）
+   OCR_PROVIDER=minimax
+   OCR_API_KEY=your-ocr-api-key-here
+   OCR_BASE_URL=https://api.minimaxi.com/v1
+   OCR_MODEL=MiniMax-M3
    ```
 
 5. **安装 Tesseract-OCR** (可选，用于图片识别功能)
@@ -150,7 +175,7 @@ npm run dev
 3. **验证 AI 状态**
 ```bash
 curl http://localhost:8000/health
-# 返回: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"qwen"}
+# 返回: {"status":"ok","version":"0.1.4","ai_enabled":true,"ai_provider":"deepseek"}
 ```
 
 ## 项目结构
@@ -163,7 +188,7 @@ Math_Helper/
 │   ├── session_store.py          # 会话存储管理 (含过期清理)
 │   ├── problem_parser.py         # 题目解析 (仅返回题目节点)
 │   ├── question_generator.py     # 苏格拉底式提问生成器 (探索+回退机制)
-│   ├── ai_service.py             # 大模型 API 服务 (OpenAI/Qwen/Baidu)
+│   ├── ai_service.py             # 大模型 API 服务（多提供商 + 降级）
 │   ├── ocr_service.py            # OCR 图片文字识别服务
 │   └── requirements.txt          # Python 依赖
 ├── src/                          # React 前端
@@ -222,88 +247,21 @@ Math_Helper/
 | `/ocr/recognize` | POST | 上传图片，返回识别文字 |
 | `/health` | GET | 健康检查（含 AI 状态） |
 
-## 自动部署（GitHub Actions + 腾讯云 CCR + Docker Compose）
+## 部署（自动）
 
-> push `dev` 或 `main` 分支即可自动构建镜像并部署到腾讯云 VPS 的对应环境。
+- 环境地址：Dev https://maths-dev.m1in.com / Prod https://maths.m1in.com
+- 推送分支：push `dev` 或 `main` 后自动构建并部署到对应环境
+- 详细部署与故障排查：见 [deploy/README.md](./deploy/README.md)
 
-### 架构
+<details>
+<summary>Dev/Prod 访问二维码</summary>
 
-```
-本地 Trae / Claude Code / Codex
-        ↓  git push origin dev / main
-GitHub Actions 自动构建 Docker 镜像
-        ↓
-推送到腾讯云 CCR 个人版镜像仓库（ccr.ccs.tencentyun.com）
-        ↓  Watchtower 自动检测 / SSH 手动
-腾讯云 VPS 拉取新镜像并重启容器
-        ↓
-dev 环境  → https://maths-dev.m1in.com  (dev 分支)
-prod 环境 → https://maths.m1in.com      (main 分支)
-```
+| 环境 | 地址 | 二维码 |
+|------|------|--------|
+| Dev（开发） | https://maths-dev.m1in.com | ![Dev 访问二维码](https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Fmaths-dev.m1in.com) |
+| Prod（生产） | https://maths.m1in.com | ![Prod 访问二维码](https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=https%3A%2F%2Fmaths.m1in.com) |
 
-镜像内 **nginx 托管前端静态文件 + 反向代理 `/api/` 到 uvicorn:8000**（去掉 `/api` 前缀），完整复刻本地开发时 Vite 的代理行为，前后端代码零改动。
-
-### 双环境策略
-
-| 环境 | 分支 | 端口 | 镜像标签 | 容器名 | 数据目录 |
-|------|------|------|---------|--------|---------|
-| Dev  | `dev` | 18080 | `:dev` | maths-helper-dev | `/data/server/maths-dev/data/` |
-| Prod | `main` | 28080 | `:main` | maths-helper-prod | `/data/server/maths-prod/data/` |
-
-两个环境同机隔离，各自持有独立的 `.env`、SQLite 数据卷（持久化，重部署不丢失）。
-
-### VPS 一次性准备
-
-```bash
-# 创建双环境目录
-sudo mkdir -p /data/server/{maths-dev,maths-prod}
-sudo chown -R $USER:$USER /data/server
-
-# 登录腾讯云 CCR（拉取镜像需要）
-echo "<YOUR_PASSWORD>" | docker login ccr.ccs.tencentyun.com -u <YOUR_USERNAME> --password-stdin
-```
-
-> `.env` 文件无需手动创建 — GitHub Actions 部署时自动从 Secrets 生成。
-
-### GitHub Secrets 配置
-
-在仓库 **Settings → Secrets and variables → Actions** 中配置：
-
-| Secret | 说明 | 示例值 |
-|--------|------|--------|
-| `VPS_HOST` | 腾讯云服务器公网 IP | `124.222.206.30` |
-| `VPS_USER` | SSH 用户 | `ubuntu` |
-| `VPS_PORT` | SSH 端口 | `22` |
-| `VPS_SSH_KEY` | SSH 私钥全文 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `VPS_APP_DIR_DEV` | dev 环境目录 | `/data/server/maths-dev` |
-| `VPS_APP_DIR_PROD` | prod 环境目录 | `/data/server/maths-prod` |
-| `TENCENT_REGISTRY_USERNAME` | 腾讯云 CCR 用户名 | `24220712` |
-| `TENCENT_REGISTRY_PASSWORD` | 腾讯云 CCR 密码 | （对应密码） |
-| `CONSOLE_PASSWORD` | 管理控制台密码 | 自定义强密码 |
-
-> AI 密钥（`AI_API_KEY`）在服务器本地 `.env` 管理，不经过 GitHub。部署 SSH 仅在配置了 `VPS_HOST` 时执行，否则依赖 Watchtower 自动更新。
-
-### 本地验证镜像
-
-```bash
-docker build -t maths-helper:test .
-docker run --rm -p 18080:80 --env-file ./.env.example maths-helper:test
-# 浏览器打开 http://localhost:18080 确认前端加载
-curl http://localhost:18080/api/health
-```
-
-### 相关文件
-
-| 文件 | 说明 |
-|------|------|
-| `Dockerfile` | 多阶段构建：node 构建前端 + python 运行时 + nginx + tesseract + curl |
-| `nginx.conf` | 静态托管 + `/api/` 反代到 :8000 + SPA 回退 |
-| `docker-entrypoint.sh` | 容器启动脚本（uvicorn + nginx） |
-| `docker-compose.dev.yml` | dev 环境编排（`:dev` 镜像 + 18080:80 + 数据卷 + 健康检查） |
-| `docker-compose.prod.yml` | prod 环境编排（`:main` 镜像 + 28080:80 + 数据卷 + 健康检查） |
-| `.github/workflows/deploy.yml` | GitHub Actions CI/CD 工作流（双环境） |
-| `deploy/README.md` | 服务器初始化与故障排查详细指南 |
-| `.env.example` | 环境变量模板（AI / 控制台密码 / CORS） |
+</details>
 
 ## 许可证
 
