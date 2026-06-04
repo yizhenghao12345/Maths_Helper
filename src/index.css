@@ -91,3 +91,20 @@ html, body, #root {
   width: 0 !important;
   height: 0 !important;
 }
+
+a[href*="trae.ai"],
+iframe[src*="trae.ai"],
+script[src*="trae.ai"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+div[id*="trae"][class*="badge"],
+div[class*="trae-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
