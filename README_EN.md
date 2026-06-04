@@ -4,6 +4,8 @@
 
 > A training tool that helps students see the mathematical thinking process through visual and interactive guidance.
 
+Live Demo: [Dev](https://maths-dev.m1in.com) ｜ [Prod](https://maths.m1in.com)
+
 ## Origin
 
 In the AI era, students rely heavily on problem-solving apps, leading to the frequent "understand at a glance, fail when solving" phenomenon. Students lack genuine problem-solving thinking. This project aims to visualize and interactively guide students through the thinking process, training mathematical logical abilities from the ground up.
@@ -221,6 +223,13 @@ Click the language button in the top-right corner of the homepage:
 | `/question/answer` | POST | Submit answer, get feedback and new nodes |
 | `/ocr/recognize` | POST | Upload image, return recognized text |
 | `/health` | GET | Health check (including AI status) |
+
+## Access QR Codes
+
+| Environment | URL | QR Code |
+|-------------|-----|--------|
+| Dev | https://maths-dev.m1in.com | ![Dev QR Code](https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fmaths-dev.m1in.com) |
+| Prod | https://maths.m1in.com | ![Prod QR Code](https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fmaths.m1in.com) |
 
 ## License
 

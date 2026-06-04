@@ -4,6 +4,8 @@
 
 > 一个通过可视化、互动式引导，帮助学生看清数学思考过程的训练工具。
 
+在线体验： [Dev（开发）](https://maths-dev.m1in.com) ｜ [Prod（生产）](https://maths.m1in.com)
+
 ## 创意来源
 
 在AI时代，学生依赖搜题软件，导致"一看就懂，一做就错"的情况频繁发生，而学生自身却缺乏真正的解题思维。本项目旨在通过可视化、互动式引导，让学生看清思考过程，从根源上训练数学逻辑能力。
@@ -240,6 +242,13 @@ GitHub Actions 自动构建 Docker 镜像
 dev 环境  → https://maths-dev.m1in.com  (dev 分支)
 prod 环境 → https://maths.m1in.com      (main 分支)
 ```
+
+### 访问二维码
+
+| 环境 | 地址 | 二维码 |
+|------|------|--------|
+| Dev（开发） | https://maths-dev.m1in.com | ![Dev 访问二维码](https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fmaths-dev.m1in.com) |
+| Prod（生产） | https://maths.m1in.com | ![Prod 访问二维码](https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https%3A%2F%2Fmaths.m1in.com) |
 
 镜像内 **nginx 托管前端静态文件 + 反向代理 `/api/` 到 uvicorn:8000**（去掉 `/api` 前缀），完整复刻本地开发时 Vite 的代理行为，前后端代码零改动。
 
