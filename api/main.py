@@ -21,7 +21,7 @@ from models import (
 from session_store import session_store
 from problem_parser import parse_problem
 from question_generator import generate_question, _get_questions_for_problem, _get_total_steps
-from ocr_service import extract_text_from_base64, log_ocr_upload_rejection
+from ocr_service import extract_text_from_base64, get_ocr_full_config, log_ocr_upload_rejection
 from ai_service import ai_service
 from console_routes import router as console_router
 import db
@@ -235,17 +235,7 @@ async def answer_question(request: QuestionRequest):
 
 @app.get("/health")
 async def health_check():
-    # 确定 OCR 使用的模型（优先环境变量 OCR_MODEL，其次按供应商默认）
-    ocr_model = (
-        os.getenv("OCR_MODEL")
-        or (
-            "MiniMax-M3" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "minimax"
-            else "gpt-4o-mini" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "openai"
-            else "qwen-vl-max" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "qwen"
-            else ai_service.model
-        )
-        if ai_service.enabled else "Tesseract"
-    )
+    ocr_config = get_ocr_full_config()
     return {
         "status": "ok",
         "version": "0.1.5",
@@ -254,7 +244,9 @@ async def health_check():
         "ai_model": ai_service.model if ai_service.enabled else None,
         "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
         "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
-        "ocr_model": ocr_model,
+        "ocr_enabled": ocr_config["enabled"],
+        "ocr_provider": ocr_config["provider"],
+        "ocr_model": ocr_config["model"] if ocr_config["enabled"] else "Tesseract",
     }
 
 

@@ -7,11 +7,152 @@ import uuid
 
 import httpx
 
-from ai_service import ai_service
+from ai_service import ai_service, mask_api_key
 import db
 
 
 OCR_LOG_PREVIEW_LIMIT = 200
+OCR_DEFAULT_PROVIDER = "minimax"
+OCR_DEFAULT_BASE_URL = "https://api.minimaxi.com/v1"
+OCR_DEFAULT_MODELS = {
+    "minimax": "MiniMax-M3",
+    "openai": "gpt-4o-mini",
+    "qwen": "qwen-vl-max",
+}
+
+
+def _get_stored_config(key: str) -> str | None:
+    try:
+        value = db.get_config(key)
+    except Exception:
+        return None
+    return value if value is not None else None
+
+
+def _resolve_ocr_model(provider: str, stored_model: str | None = None) -> str:
+    if stored_model:
+        return stored_model
+    return OCR_DEFAULT_MODELS.get(provider, ai_service.model)
+
+
+def get_ocr_full_config() -> dict:
+    provider = (
+        _get_stored_config("ocr_provider")
+        or os.getenv("OCR_PROVIDER")
+        or OCR_DEFAULT_PROVIDER
+    ).lower()
+    api_key = _get_stored_config("ocr_api_key")
+    if api_key is None:
+        api_key = os.getenv("OCR_API_KEY", "")
+    base_url = (
+        _get_stored_config("ocr_base_url")
+        or os.getenv("OCR_BASE_URL")
+        or OCR_DEFAULT_BASE_URL
+    )
+    model = _resolve_ocr_model(
+        provider,
+        _get_stored_config("ocr_model") or os.getenv("OCR_MODEL"),
+    )
+    return {
+        "provider": provider,
+        "model": model,
+        "api_key_masked": mask_api_key(api_key),
+        "base_url": base_url,
+        "enabled": bool(api_key),
+    }
+
+
+def get_ocr_runtime_config() -> dict:
+    config = get_ocr_full_config()
+    api_key = _get_stored_config("ocr_api_key")
+    if api_key is None:
+        api_key = os.getenv("OCR_API_KEY", "")
+    return {**config, "api_key": api_key}
+
+
+def _create_ocr_test_image_base64() -> str:
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (240, 90), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((36, 28), "2 + 5 = 7", fill="black")
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+
+async def test_ocr_connection(
+    *,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+    language: str = "zh-CN",
+) -> dict:
+    provider = (provider or "").lower().strip()
+    api_key = (api_key or "").strip()
+    base_url = (base_url or "").rstrip("/")
+    model = (model or "").strip()
+    request_id = uuid.uuid4().hex[:8]
+    started_at = time.time()
+
+    if not provider or not model or not base_url:
+        return {"success": False, "message": "OCR供应商、模型和基础URL不能为空"}
+    if not api_key:
+        return {"success": False, "message": "OCR API密钥不能为空"}
+    if provider not in ["minimax", "openai", "qwen", "custom"]:
+        return {"success": False, "message": f"不支持的 OCR_PROVIDER: {provider}"}
+
+    try:
+        image_base64 = _create_ocr_test_image_base64()
+        text = await _multimodal_ocr(
+            base64_data=image_base64,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            language=language,
+        )
+        normalized = re.sub(r"\s+", "", text or "")
+        success = all(part in normalized for part in ("2", "5", "7"))
+        message = "OCR连接成功，模型返回有效图片识别结果" if success else "OCR连接成功，但未识别出预期测试内容"
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=success,
+            request_id=request_id,
+            response_text=text,
+            error_message="" if success else message,
+        )
+        return {"success": success, "message": message, "response_preview": text[:100]}
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.text[:500] if e.response is not None else str(e)
+        message = f"HTTP {e.response.status_code}: {error_detail}" if e.response is not None else str(e)
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=message,
+        )
+        return {"success": False, "message": message}
+    except Exception as e:
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=str(e),
+        )
+        return {"success": False, "message": str(e)}
 
 
 def _log_ocr_event(
@@ -106,20 +247,11 @@ async def extract_text_from_base64(
     # 1. 优先使用多模态大模型
     try:
         multimodal_start = time.time()
-        ocr_provider = os.getenv("OCR_PROVIDER") or ai_service.provider
-        ocr_api_key = os.getenv("OCR_API_KEY") or ai_service.api_key
-        ocr_base_url = os.getenv("OCR_BASE_URL") or ai_service.base_url
-
-        ocr_model = os.getenv("OCR_MODEL")
-        if not ocr_model:
-            if ocr_provider == "minimax":
-                ocr_model = "MiniMax-M3"
-            elif ocr_provider == "openai":
-                ocr_model = "gpt-4o-mini"
-            elif ocr_provider == "qwen":
-                ocr_model = "qwen-vl-max"
-            else:
-                ocr_model = ai_service.model
+        ocr_config = get_ocr_runtime_config()
+        ocr_provider = ocr_config["provider"]
+        ocr_api_key = ocr_config["api_key"]
+        ocr_base_url = ocr_config["base_url"]
+        ocr_model = ocr_config["model"]
 
         if ocr_api_key and ocr_provider in ["minimax", "openai", "qwen", "custom"]:
             text = await _multimodal_ocr(

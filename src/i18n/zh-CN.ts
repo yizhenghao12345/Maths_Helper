@@ -140,6 +140,7 @@ export const zhCN = {
     aiDebug: {
       title: 'AI调试',
       config: 'AI配置',
+      ocrConfig: 'OCR配置',
       provider: '供应商',
       model: '模型',
       fastModel: '快模型',
@@ -165,6 +166,8 @@ export const zhCN = {
       cancelEdit: '取消',
       saveConfig: '保存',
       testConnection: '测试连接',
+      testAIConnection: '测试AI连接',
+      testOCRConnection: '测试OCR连接',
       testing: '测试中...',
       testSuccess: '连接成功',
       testFailed: '连接失败',

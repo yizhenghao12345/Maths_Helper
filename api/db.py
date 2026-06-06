@@ -295,7 +295,7 @@ def get_ai_logs(limit: int = 50, offset: int = 0) -> list[dict]:
     conn = _get_conn()
     try:
         rows = conn.execute(
-            "SELECT * FROM ai_logs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM ai_logs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
             (limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]

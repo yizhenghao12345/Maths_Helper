@@ -142,6 +142,7 @@ export const enUS: typeof zhCN = {
     aiDebug: {
       title: 'AI Debug',
       config: 'AI Config',
+      ocrConfig: 'OCR Config',
       provider: 'Provider',
       model: 'Model',
       fastModel: 'Fast Model',
@@ -167,6 +168,8 @@ export const enUS: typeof zhCN = {
       cancelEdit: 'Cancel',
       saveConfig: 'Save',
       testConnection: 'Test Connection',
+      testAIConnection: 'Test AI',
+      testOCRConnection: 'Test OCR',
       testing: 'Testing...',
       testSuccess: 'Connection successful',
       testFailed: 'Connection failed',

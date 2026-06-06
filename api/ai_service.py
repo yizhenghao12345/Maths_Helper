@@ -511,20 +511,31 @@ class AIService:
         return self.fast_model
 
     async def test_connection(self, provider: str, api_key: str, base_url: str, model: str) -> dict:
+        provider = (provider or "").lower().strip()
+        api_key = (api_key or "").strip()
+        base_url = (base_url or "").rstrip("/")
+        model = (model or "").strip()
+        started_at = time.time()
+
+        if not provider or not model or not base_url:
+            return {"success": False, "message": "供应商、模型和基础URL不能为空"}
+        if not api_key:
+            return {"success": False, "message": "API密钥不能为空"}
+
         try:
-            messages = [{"role": "user", "content": "Hi"}]
+            messages = [{"role": "user", "content": "Return exactly OK."}]
             if provider == "baidu":
                 url = f"{base_url}/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions"
                 params = {"access_token": api_key}
                 payload = {
                     "messages": messages,
-                    "max_output_tokens": 5,
+                    "max_output_tokens": 8,
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(url, params=params, json=payload)
                     response.raise_for_status()
                     data = response.json()
-                    preview = data.get("result", "")[:100]
+                    preview = (data.get("result") or "").strip()[:100]
             else:
                 url = f"{base_url}/chat/completions"
                 headers = {
@@ -534,15 +545,71 @@ class AIService:
                 payload = {
                     "model": model,
                     "messages": messages,
-                    "max_tokens": 5,
+                    "temperature": 0,
+                    "max_tokens": 8,
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(url, headers=headers, json=payload)
                     response.raise_for_status()
                     data = response.json()
-                    preview = data["choices"][0]["message"]["content"][:100]
-            return {"success": True, "message": "连接成功", "response_preview": preview}
+                    preview = (data["choices"][0]["message"]["content"] or "").strip()[:100]
+
+            success = bool(preview) and "ok" in preview.lower()
+            message = "连接成功，模型返回有效测试响应" if success else "连接成功，但模型未返回预期测试内容"
+            try:
+                db.add_ai_log(
+                    session_id=None,
+                    provider=provider,
+                    model=model,
+                    method="test_connection",
+                    used_parsed_problem=False,
+                    parsed_problem_title=None,
+                    request_summary="Return exactly OK.",
+                    response_summary=preview,
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    success=success,
+                    error_message="" if success else message,
+                )
+            except Exception:
+                pass
+            return {"success": success, "message": message, "response_preview": preview}
+        except httpx.HTTPStatusError as e:
+            error_detail = e.response.text[:500] if e.response is not None else str(e)
+            message = f"HTTP {e.response.status_code}: {error_detail}" if e.response is not None else str(e)
+            try:
+                db.add_ai_log(
+                    session_id=None,
+                    provider=provider,
+                    model=model,
+                    method="test_connection",
+                    used_parsed_problem=False,
+                    parsed_problem_title=None,
+                    request_summary="Return exactly OK.",
+                    response_summary="",
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    success=False,
+                    error_message=message[:500],
+                )
+            except Exception:
+                pass
+            return {"success": False, "message": message}
         except Exception as e:
+            try:
+                db.add_ai_log(
+                    session_id=None,
+                    provider=provider,
+                    model=model,
+                    method="test_connection",
+                    used_parsed_problem=False,
+                    parsed_problem_title=None,
+                    request_summary="Return exactly OK.",
+                    response_summary="",
+                    duration_ms=int((time.time() - started_at) * 1000),
+                    success=False,
+                    error_message=str(e)[:500],
+                )
+            except Exception:
+                pass
             return {"success": False, "message": str(e)}
 
     def get_full_config(self) -> dict:
