@@ -1,9 +1,57 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Upload, Image, X, Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Image as ImageIcon, X, Loader2, Sparkles } from 'lucide-react'
 import { submitProblem, recognizeImage, fetchHealth } from '@/api'
 import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
+
+const MAX_OCR_IMAGE_SIZE = 2400
+const OCR_IMAGE_QUALITY = 0.9
+
+async function normalizeImageFile(file: File): Promise<{ file: File; preview: string }> {
+  const objectUrl = URL.createObjectURL(file)
+
+  try {
+    const img = document.createElement('img')
+    img.decoding = 'async'
+    img.src = objectUrl
+    await img.decode()
+
+    const scale = Math.min(1, MAX_OCR_IMAGE_SIZE / Math.max(img.naturalWidth, img.naturalHeight))
+    const width = Math.max(1, Math.round(img.naturalWidth * scale))
+    const height = Math.max(1, Math.round(img.naturalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext('2d')
+    if (!context) {
+      throw new Error('Canvas is unavailable')
+    }
+
+    context.drawImage(img, 0, 0, width, height)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', OCR_IMAGE_QUALITY)
+    })
+
+    if (!blob) {
+      throw new Error('Image conversion failed')
+    }
+
+    const normalizedFile = new File(
+      [blob],
+      file.name.replace(/\.[^.]+$/, '') + '.jpg',
+      { type: 'image/jpeg', lastModified: Date.now() },
+    )
+
+    return {
+      file: normalizedFile,
+      preview: URL.createObjectURL(blob),
+    }
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
 
 const ProblemInput = () => {
   const navigate = useNavigate()
@@ -30,22 +78,28 @@ const ProblemInput = () => {
   const setQuestion = useStore((state) => state.setQuestion)
   const resetDeduction = useStore((state) => state.resetDeduction)
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
+    if (file.type && !file.type.startsWith('image/')) {
       setError(t.input.selectImageError)
       return
     }
 
-    setImageFile(file)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      setImagePreview(event.target?.result as string)
+    try {
+      const normalized = await normalizeImageFile(file)
+      setImageFile(normalized.file)
+      setImagePreview((previousPreview) => {
+        if (previousPreview?.startsWith('blob:')) {
+          URL.revokeObjectURL(previousPreview)
+        }
+        return normalized.preview
+      })
+      setError('')
+    } catch {
+      setError(t.input.selectImageError)
     }
-    reader.readAsDataURL(file)
-    setError('')
   }
 
   const handleRecognize = async () => {
@@ -61,14 +115,17 @@ const ProblemInput = () => {
       } else {
         setError(t.input.noTextRecognized)
       }
-    } catch {
-      setError(t.input.recognizeError)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.input.recognizeError)
     } finally {
       setIsRecognizing(false)
     }
   }
 
   const handleRemoveImage = () => {
+    if (imagePreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(imagePreview)
+    }
     setImageFile(null)
     setImagePreview(null)
     if (fileInputRef.current) {
@@ -186,7 +243,7 @@ const ProblemInput = () => {
                   {isRecognizing ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Image className="w-4 h-4" />
+                    <ImageIcon className="w-4 h-4" />
                   )}
                   {isRecognizing ? t.input.recognizing : t.input.recognizeImage}
                 </button>
@@ -206,7 +263,7 @@ const ProblemInput = () => {
                 {/* 页面加载即显示当前 OCR 模型 */}
                 {ocrModel && (
                   <span className="text-xs text-gray-400 px-2 py-1 bg-gray-50 rounded-full border border-gray-100">
-                    识别模型：{ocrModel}
+                    {t.input.ocrModelLabel}{ocrModel}
                   </span>
                 )}
                 <input

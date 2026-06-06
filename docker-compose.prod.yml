@@ -20,12 +20,12 @@ services:
       # 持久化 SQLite 数据，避免重部署丢失（容器内路径见 api/db.py: api/data/）
       - ./data:/app/api/data
     healthcheck:
-      # 经 nginx 代理访问后端 /health（nginx.conf 将 /api/ 去前缀转发到 :8000）
-      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+      # 直接检查后端，避免高频经 nginx 代理刷 /health 日志
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 5m
+      timeout: 3s
+      retries: 2
+      start_period: 30s
     labels:
       - "com.centurylinklabs.watchtower.scope=prod"
 

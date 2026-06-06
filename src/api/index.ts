@@ -71,7 +71,9 @@ export async function recognizeImage(file: File, language = 'zh-CN'): Promise<Oc
   })
 
   if (!response.ok) {
-    throw new Error('图片识别失败')
+    const errorData = await response.json().catch(() => null)
+    const detail = typeof errorData?.detail === 'string' ? errorData.detail : '图片识别失败'
+    throw new Error(detail)
   }
 
   return response.json()
