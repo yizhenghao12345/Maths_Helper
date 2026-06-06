@@ -20,7 +20,7 @@ from models import (
 from session_store import session_store
 from problem_parser import parse_problem
 from question_generator import generate_question, _get_questions_for_problem, _get_total_steps
-from ocr_service import extract_text_from_base64
+from ocr_service import extract_text_from_base64, log_ocr_upload_rejection
 from ai_service import ai_service
 from console_routes import router as console_router
 import db
@@ -90,7 +90,7 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
 
-app = FastAPI(title="Math Thinking Trainer API", version="0.1.3", lifespan=lifespan)
+app = FastAPI(title="Math Thinking Trainer API", version="0.1.5", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -213,7 +213,7 @@ async def health_check():
     )
     return {
         "status": "ok",
-        "version": "0.1.3",
+        "version": "0.1.5",
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,
@@ -236,10 +236,23 @@ async def recognize_image(
 ):
     image_bytes = await file.read()
     if not image_bytes:
+        log_ocr_upload_rejection(
+            reason="图片文件为空",
+            language=language,
+            content_type=file.content_type,
+            filename=file.filename,
+        )
         raise HTTPException(status_code=400, detail="图片文件为空")
 
     media_type = _detect_image_media_type(image_bytes, file.content_type)
     if not media_type:
+        log_ocr_upload_rejection(
+            reason="不支持的图片格式",
+            language=language,
+            content_type=file.content_type,
+            filename=file.filename,
+            file_size=len(image_bytes),
+        )
         raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、GIF 或 WebP 图片")
 
     base64_data = f"data:{media_type};base64,{base64.b64encode(image_bytes).decode()}"

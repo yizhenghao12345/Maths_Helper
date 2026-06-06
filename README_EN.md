@@ -1,4 +1,4 @@
-# Math Thinking Trainer v0.1.4
+# Math Thinking Trainer v0.1.5
 
 [中文文档](./README.md)
 
