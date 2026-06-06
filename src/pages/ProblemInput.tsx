@@ -6,16 +6,25 @@ import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
 
 const MAX_OCR_IMAGE_SIZE = 2400
-const OCR_IMAGE_QUALITY = 0.9
+const MAX_OCR_IMAGE_BYTES = 2.5 * 1024 * 1024
+const OCR_IMAGE_QUALITIES = [0.9, 0.82, 0.74, 0.66]
+
+async function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
+  const img = document.createElement('img')
+  img.decoding = 'async'
+
+  return new Promise((resolve, reject) => {
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Image load failed'))
+    img.src = url
+  })
+}
 
 async function normalizeImageFile(file: File): Promise<{ file: File; preview: string }> {
   const objectUrl = URL.createObjectURL(file)
 
   try {
-    const img = document.createElement('img')
-    img.decoding = 'async'
-    img.src = objectUrl
-    await img.decode()
+    const img = await loadImageFromUrl(objectUrl)
 
     const scale = Math.min(1, MAX_OCR_IMAGE_SIZE / Math.max(img.naturalWidth, img.naturalHeight))
     const width = Math.max(1, Math.round(img.naturalWidth * scale))
@@ -30,9 +39,15 @@ async function normalizeImageFile(file: File): Promise<{ file: File; preview: st
     }
 
     context.drawImage(img, 0, 0, width, height)
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', OCR_IMAGE_QUALITY)
-    })
+    let blob: Blob | null = null
+    for (const quality of OCR_IMAGE_QUALITIES) {
+      blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', quality)
+      })
+      if (blob && blob.size <= MAX_OCR_IMAGE_BYTES) {
+        break
+      }
+    }
 
     if (!blob) {
       throw new Error('Image conversion failed')
