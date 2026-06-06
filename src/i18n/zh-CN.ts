@@ -37,6 +37,7 @@ export const zhCN = {
     placeholder: '例如: 解方程 2x + 5 = 13, 求x的值',
     uploadImage: '上传图片',
     recognizeImage: '识别图片文字',
+    ocrModelLabel: '识别模型：',
     recognizing: '识别中...',
     preview: '预览',
     startDeduction: '开始推演',

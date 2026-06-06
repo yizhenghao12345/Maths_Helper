@@ -26,6 +26,30 @@ from console_routes import router as console_router
 import db
 
 
+IMAGE_SIGNATURES = (
+    ("image/jpeg", (b"\xff\xd8\xff",)),
+    ("image/png", (b"\x89PNG\r\n\x1a\n",)),
+    ("image/gif", (b"GIF87a", b"GIF89a")),
+    ("image/webp", (b"RIFF",)),
+)
+
+
+def _detect_image_media_type(image_bytes: bytes, content_type: str | None) -> str | None:
+    normalized_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if normalized_content_type.startswith("image/"):
+        return normalized_content_type
+
+    for media_type, signatures in IMAGE_SIGNATURES:
+        if media_type == "image/webp":
+            if image_bytes.startswith(b"RIFF") and image_bytes[8:12] == b"WEBP":
+                return media_type
+            continue
+        if any(image_bytes.startswith(signature) for signature in signatures):
+            return media_type
+
+    return None
+
+
 async def cleanup_sessions():
     while True:
         await asyncio.sleep(300)
@@ -210,11 +234,15 @@ async def recognize_image(
     file: UploadFile = File(...),
     language: str = Form("zh-CN"),
 ):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="仅支持图片文件")
-
     image_bytes = await file.read()
-    base64_data = f"data:{file.content_type};base64,{base64.b64encode(image_bytes).decode()}"
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="图片文件为空")
+
+    media_type = _detect_image_media_type(image_bytes, file.content_type)
+    if not media_type:
+        raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、GIF 或 WebP 图片")
+
+    base64_data = f"data:{media_type};base64,{base64.b64encode(image_bytes).decode()}"
     result = await extract_text_from_base64(base64_data, language)
     # 只返回识别的文本内容
     return {"text": result.get("text", "")}

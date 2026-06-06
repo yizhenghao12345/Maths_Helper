@@ -39,6 +39,7 @@ export const enUS: typeof zhCN = {
     placeholder: 'e.g., Solve the equation 2x + 5 = 13, find the value of x',
     uploadImage: 'Upload Image',
     recognizeImage: 'Recognize Text from Image',
+    ocrModelLabel: 'Recognition model: ',
     recognizing: 'Recognizing...',
     preview: 'Preview',
     startDeduction: 'Start Deduction',
