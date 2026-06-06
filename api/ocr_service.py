@@ -2,10 +2,85 @@ import base64
 import io
 import os
 import re
+import time
+import uuid
 
 import httpx
 
 from ai_service import ai_service
+import db
+
+
+OCR_LOG_PREVIEW_LIMIT = 200
+
+
+def _log_ocr_event(
+    *,
+    method: str,
+    provider: str,
+    model: str,
+    language: str,
+    duration_ms: int,
+    success: bool,
+    request_id: str,
+    response_text: str = "",
+    error_message: str = "",
+):
+    response_summary = (response_text or "")[:OCR_LOG_PREVIEW_LIMIT]
+    error_summary = (error_message or "")[:500]
+    status = "成功" if success else "失败"
+    print(
+        (
+            f"OCR{status}: request_id={request_id} method={method} "
+            f"provider={provider or '-'} model={model or '-'} "
+            f"language={language} duration_ms={duration_ms} "
+            f"text_length={len(response_text or '')}"
+            + (f" error={error_summary}" if error_summary else "")
+        ),
+        flush=True,
+    )
+
+    try:
+        db.add_ai_log(
+            session_id=None,
+            provider=provider or "ocr",
+            model=model or "-",
+            method=method,
+            used_parsed_problem=False,
+            parsed_problem_title=None,
+            request_summary=f"request_id={request_id}; language={language}",
+            response_summary=response_summary,
+            duration_ms=duration_ms,
+            success=success,
+            error_message=error_summary,
+        )
+    except Exception:
+        pass
+
+
+def log_ocr_upload_rejection(
+    *,
+    reason: str,
+    language: str,
+    content_type: str | None = None,
+    filename: str | None = None,
+    file_size: int | None = None,
+):
+    request_id = uuid.uuid4().hex[:8]
+    detail = (
+        f"filename={filename or '-'}; content_type={content_type or '-'}; "
+        f"file_size={file_size if file_size is not None else '-'}"
+    )
+    _log_ocr_event(
+        method="ocr:upload",
+        provider="upload",
+        model="-",
+        language=language,
+        duration_ms=0,
+        success=False,
+        request_id=request_id,
+        error_message=f"{reason}; {detail}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -26,8 +101,11 @@ async def extract_text_from_base64(
     if "," in base64_data:
         raw_base64 = base64_data.split(",")[1]
 
+    request_id = uuid.uuid4().hex[:8]
+
     # 1. 优先使用多模态大模型
     try:
+        multimodal_start = time.time()
         ocr_provider = os.getenv("OCR_PROVIDER") or ai_service.provider
         ocr_api_key = os.getenv("OCR_API_KEY") or ai_service.api_key
         ocr_base_url = os.getenv("OCR_BASE_URL") or ai_service.base_url
@@ -52,16 +130,80 @@ async def extract_text_from_base64(
                 language=language,
             )
             if text:
+                _log_ocr_event(
+                    method="ocr:multimodal",
+                    provider=ocr_provider,
+                    model=ocr_model,
+                    language=language,
+                    duration_ms=int((time.time() - multimodal_start) * 1000),
+                    success=True,
+                    request_id=request_id,
+                    response_text=text,
+                )
                 return {"text": text, "model_used": ocr_model}
+            _log_ocr_event(
+                method="ocr:multimodal",
+                provider=ocr_provider,
+                model=ocr_model,
+                language=language,
+                duration_ms=int((time.time() - multimodal_start) * 1000),
+                success=False,
+                request_id=request_id,
+                error_message="多模态 OCR 返回空文本，降级到 Tesseract",
+            )
+        else:
+            reason = "未配置 OCR_API_KEY" if not ocr_api_key else f"不支持的 OCR_PROVIDER: {ocr_provider}"
+            _log_ocr_event(
+                method="ocr:multimodal",
+                provider=ocr_provider,
+                model=ocr_model,
+                language=language,
+                duration_ms=int((time.time() - multimodal_start) * 1000),
+                success=False,
+                request_id=request_id,
+                error_message=f"{reason}，降级到 Tesseract",
+            )
     except Exception as e:
-        print(f"大模型多模态 OCR 失败: {e}，降级到本地 Tesseract。")
+        _log_ocr_event(
+            method="ocr:multimodal",
+            provider=locals().get("ocr_provider", "unknown"),
+            model=locals().get("ocr_model", "unknown"),
+            language=language,
+            duration_ms=int((time.time() - multimodal_start) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=f"{e}，降级到本地 Tesseract",
+        )
 
     # 2. 降级：本地 Tesseract OCR
+    tesseract_start = time.time()
     try:
         image_bytes = base64.b64decode(raw_base64)
         text = _simple_ocr(image_bytes)
+        success = bool(text) and not text.startswith(("OCR 识别失败:", "未安装 OCR 依赖。"))
+        _log_ocr_event(
+            method="ocr:tesseract",
+            provider="tesseract",
+            model="Tesseract",
+            language=language,
+            duration_ms=int((time.time() - tesseract_start) * 1000),
+            success=success,
+            request_id=request_id,
+            response_text=text if success else "",
+            error_message="" if success else text or "Tesseract 返回空文本",
+        )
         return {"text": text, "model_used": "Tesseract"}
     except Exception as e:
+        _log_ocr_event(
+            method="ocr:tesseract",
+            provider="tesseract",
+            model="Tesseract",
+            language=language,
+            duration_ms=int((time.time() - tesseract_start) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=str(e),
+        )
         return {"text": f"OCR 失败: {str(e)}", "model_used": "Tesseract"}
 
 
