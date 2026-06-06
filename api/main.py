@@ -3,6 +3,7 @@ import base64
 import os
 import uuid
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +59,44 @@ def _start_background_parse(session):
     session.parsed_problem_task = asyncio.create_task(_parse_problem_in_background(session))
 
 
+def _get_initial_node_context(nodes) -> str:
+    if not nodes:
+        return ""
+
+    first_node = nodes[0]
+    label = getattr(first_node, "label", "") or ""
+    data = getattr(first_node, "data", None)
+    content = getattr(data, "content", "") if data else ""
+    return f"{label}\n{content}".strip()
+
+
+async def _generate_ai_first_question(session, language: str) -> Optional[dict]:
+    parsed_problem = getattr(session, "parsed_problem", None)
+
+    if parsed_problem is None:
+        try:
+            # 首问优先等待模型解析结果，让提问更贴题；超时后再走降级。
+            parsed_problem = await asyncio.wait_for(
+                ai_service.parse_problem(session.problem, session_id=session.session_id),
+                timeout=8,
+            )
+            session.parsed_problem = parsed_problem
+        except Exception as e:
+            print(f"AI解析首题上下文失败，回退为快模型首问: {e}")
+            _start_background_parse(session)
+
+    return await ai_service.generate_socratic_question(
+        problem=session.problem,
+        history=[],
+        current_step=0,
+        total_steps=_get_total_steps(session),
+        parsed_problem=parsed_problem,
+        language=language,
+        current_node_context=_get_initial_node_context(session.nodes),
+        session_id=session.session_id,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
@@ -95,17 +134,8 @@ async def submit_problem(request: SubmitProblemRequest):
     current_question_data = None
 
     if ai_service.enabled:
-        _start_background_parse(session)
-
         try:
-            question_data = await ai_service.generate_socratic_question(
-                problem=request.problem,
-                history=[],
-                current_step=0,
-                total_steps=_get_total_steps(session),
-                language=language,
-                session_id=session_id,
-            )
+            question_data = await _generate_ai_first_question(session, language)
             current_question_data = question_data
             first_question = question_data.get("question")
             first_options = question_data.get("options")

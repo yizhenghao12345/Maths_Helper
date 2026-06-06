@@ -5,14 +5,7 @@ import { I18nProvider } from './i18n/I18nContext'
 import './index.css'
 
 const removeTraeLinks = () => {
-  const selectors = [
-    '#trae-badge-plugin',
-    '.trae-badge',
-    'a[href*="trae.ai"]',
-    'iframe[src*="trae.ai"]',
-    'script[src*="trae.ai"]',
-    'link[href*="trae.ai"]',
-  ]
+  const selectors = ['#trae-badge-plugin', '.trae-badge']
   document.querySelectorAll(selectors.join(',')).forEach((node) => node.remove())
 }
 

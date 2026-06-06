@@ -425,12 +425,42 @@ def _default_socratic_question(
     }
 
 
+def _is_natural_option(option: str, language: str) -> bool:
+    text = (option or "").strip().lower()
+    if not text:
+        return False
+
+    banned_terms = [
+        "放弃",
+        "不做了",
+        "跳过",
+        "随便猜",
+        "随意猜",
+        "乱猜",
+        "瞎猜",
+        "不用求了",
+        "随便写",
+        "不计算了",
+        "guess randomly",
+        "give up",
+        "skip",
+        "i don't know",
+        "write anything",
+    ]
+
+    return not any(term in text for term in banned_terms)
+
+
 def _normalize_socratic_question(result: dict, language: str, current_step: int) -> dict:
     fallback = _default_socratic_question("", language, current_step)
     options = result.get("options")
     normalized_options = []
     if isinstance(options, list):
-        normalized_options = [str(option).strip() for option in options if str(option).strip()]
+        normalized_options = [
+            str(option).strip()
+            for option in options
+            if str(option).strip() and _is_natural_option(str(option), language)
+        ]
 
     if len(normalized_options) < 2:
         normalized_options = fallback["options"]
@@ -840,6 +870,7 @@ Generate the Socratic question for this step. The question type is "{q_type_name
    - 每个选项都必须是认真思考后可能得出的合理思路
    - 一个是最优路径，其余是可行但次优、绕远或有局限的路径
    - 干扰项应反映真实的学生常见思维——如选错公式、忽略条件、计算顺序错误、过早代入
+   - 错误选项也要自然，像学生真的会认真考虑的思路，不能故意写得很傻
    - 禁止出现"放弃"、"随便猜"、"跳过"、"不做了"等消极选项
    - 禁止出现与题目无关的荒谬选项
    - 每个选项要描述具体的思考或操作，而非笼统态度

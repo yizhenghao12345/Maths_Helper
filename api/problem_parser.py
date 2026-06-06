@@ -1,6 +1,7 @@
 from models import MindNode, MindEdge, Position, NodeData
 import uuid
 from ai_service import ai_service
+from problem_classifier import detect_problem_type
 
 
 def _get_problem_text(language: str) -> tuple[str, str]:
@@ -26,17 +27,5 @@ async def parse_problem(problem: str, language: str = "zh-CN") -> tuple[list[Min
 
     return nodes, edges
 
-
 def _detect_problem_type(problem: str) -> str:
-    equation_keywords = ["方程", "解方程", "x=", "求x", "等于", "=", "+", "-"]
-    geometry_keywords = ["三角形", "圆", "正方形", "长方形", "面积", "周长", "角度", "平行四边形"]
-
-    for keyword in equation_keywords:
-        if keyword in problem:
-            return "equation"
-
-    for keyword in geometry_keywords:
-        if keyword in problem:
-            return "geometry"
-
-    return "general"
+    return detect_problem_type(problem)

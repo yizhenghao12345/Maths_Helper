@@ -2,6 +2,7 @@ from typing import Optional
 from models import MindNode, MindEdge, QuestionResponse, Position, NodeData
 import uuid
 from ai_service import ai_service
+from problem_classifier import detect_problem_type
 
 MAX_CONSECUTIVE_ERRORS = 2
 
@@ -740,10 +741,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
             {
                 "question": "观察这个方程，你认为第一步应该做什么？",
                 "options": [
-                    "A. 直接计算结果",
+                    "A. 先看未知数分别出现在等式哪一边，判断是否需要移项整理",
                     "B. 移项，把含未知数的项移到一边",
-                    "C. 忽略等式，随便算",
-                    "D. 放弃不做",
+                    "C. 先代入一个猜测值，看看等式两边差多少",
+                    "D. 先检查能不能把左右两边分别化简，再决定下一步",
                 ],
                 "correct": "B",
                 "success_feedback": "很好。移项是解方程的重要第一步。",
@@ -754,9 +755,9 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
                 "question": "移项后，下一步应该做什么？",
                 "options": [
                     "A. 合并同类项，化简等式",
-                    "B. 重新抄一遍题目",
-                    "C. 直接写出答案",
-                    "D. 换个题目做",
+                    "B. 先看看两边还有没有括号或分母需要进一步处理",
+                    "C. 直接根据现在的式子估算未知数",
+                    "D. 把未知数再移回另一边，重新整理一次",
                 ],
                 "correct": "A",
                 "success_feedback": "正确。化简能让等式关系更清晰。",
@@ -766,10 +767,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
             {
                 "question": "化简后，如何求出未知数？",
                 "options": [
-                    "A. 猜一个数字",
+                    "A. 先代入几个数试一试，看看哪一个更接近",
                     "B. 两边同时除以系数",
-                    "C. 不用求了",
-                    "D. 随便写答案",
+                    "C. 两边再同时加上同一个数，观察式子变化",
+                    "D. 把等式改写成比例式再尝试求解",
                 ],
                 "correct": "B",
                 "success_feedback": "太棒了。这样就能得到最终答案。",
@@ -782,10 +783,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
             {
                 "question": "这道题涉及什么几何图形或关系？",
                 "options": [
-                    "A. 随意猜测",
+                    "A. 先根据题目中的边、角或特殊条件判断图形类型",
                     "B. 识别图形和性质",
-                    "C. 不管图形直接算",
-                    "D. 跳过这步",
+                    "C. 先从题目给出的数量关系入手，看看能不能直接列式",
+                    "D. 先画一个辅助图，再反过来确认涉及了哪些性质",
                 ],
                 "correct": "B",
                 "success_feedback": "很好。认清图形是关键起点。",
@@ -795,10 +796,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
             {
                 "question": "确定图形后，下一步应该选什么方法？",
                 "options": [
-                    "A. 随便选公式",
+                    "A. 先从自己最熟悉的公式入手，看看能不能套进去",
                     "B. 根据所求选择公式或方法",
-                    "C. 不用公式直接目测",
-                    "D. 放弃",
+                    "C. 先找有没有可以利用的相似、平行或对称关系",
+                    "D. 先设未知量，再看是否能用几何性质建立关系",
                 ],
                 "correct": "B",
                 "success_feedback": "正确。方法要和题目目标匹配。",
@@ -808,10 +809,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
             {
                 "question": "代入数值计算时需要注意什么？",
                 "options": [
-                    "A. 不用注意",
+                    "A. 先确认每个量对应的是哪条边、哪段高或哪个角",
                     "B. 注意单位和计算精度",
-                    "C. 大概估算就行",
-                    "D. 不计算了",
+                    "C. 如果数字复杂，可以先估算结果大概落在哪个范围",
+                    "D. 先检查公式里每个字母对应的物理意义是否一致",
                 ],
                 "correct": "B",
                 "success_feedback": "非常棒。细心处理细节很重要。",
@@ -823,10 +824,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
         {
             "question": "仔细阅读题目后，最终要求是什么？",
             "options": [
-                "A. 没认真看题",
+                "A. 先用自己的话复述题目到底要你求什么",
                 "B. 先明确所求目标",
-                "C. 随便猜一个结果",
-                "D. 不做了",
+                "C. 先看看题目里哪些条件和最终问题最直接相关",
+                "D. 先判断答案大概会是什么类型的量或关系",
             ],
             "correct": "B",
             "success_feedback": "很好。明确目标是第一步。",
@@ -836,10 +837,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
         {
             "question": "根据题目条件，接下来该用什么策略？",
             "options": [
-                "A. 直接算",
+                "A. 先从最显眼的数量关系开始尝试列式",
                 "B. 分析条件后选择策略",
-                "C. 先问别人",
-                "D. 放弃",
+                "C. 先把条件分类，看哪些是直接条件，哪些是隐藏关系",
+                "D. 先回忆类似题目通常会从哪一步切入",
             ],
             "correct": "B",
             "success_feedback": "正确。策略选对了，后面会顺很多。",
@@ -849,10 +850,10 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
         {
             "question": "真正开始求解时，过程应该怎样展开？",
             "options": [
-                "A. 跳过过程",
+                "A. 先写出关键中间量，再逐步推进",
                 "B. 按步骤推理并求解",
-                "C. 不做了",
-                "D. 随便写答案",
+                "C. 先从最容易算的一步开始，边算边修正思路",
+                "D. 先把可能用到的公式或性质都列出来再选择",
             ],
             "correct": "B",
             "success_feedback": "太棒了。清晰的步骤能让答案更可靠。",
@@ -863,18 +864,7 @@ def _get_questions_for_problem(problem: str, language: str = "zh-CN") -> list[di
 
 
 def _detect_problem_type(problem: str) -> str:
-    equation_keywords = ["方程", "解方程", "x=", "求x", "等于", "="]
-    geometry_keywords = ["三角形", "圆", "正方形", "长方形", "面积", "周长", "角度"]
-
-    for keyword in equation_keywords:
-        if keyword in problem:
-            return "equation"
-
-    for keyword in geometry_keywords:
-        if keyword in problem:
-            return "geometry"
-
-    return "general"
+    return detect_problem_type(problem)
 
 
 def _generate_final_solution(problem: str, language: str = "zh-CN") -> str:
