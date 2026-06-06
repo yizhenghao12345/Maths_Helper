@@ -1,4 +1,4 @@
-# 数学思维训练助手 v0.1.4
+# 数学思维训练助手 v0.1.5
 
 [English Documentation](./README_EN.md)
 

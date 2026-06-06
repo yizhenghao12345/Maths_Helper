@@ -90,7 +90,7 @@ async def health(user=Depends(get_current_console_user)):
     session_count = db.get_stats()["total_sessions"]
     return {
         "status": "ok",
-        "version": "0.1.3",
+        "version": "0.1.5",
         "ai_enabled": ai_service.enabled,
         "ai_provider": ai_service.provider if ai_service.enabled else None,
         "ai_model": ai_service.model if ai_service.enabled else None,
