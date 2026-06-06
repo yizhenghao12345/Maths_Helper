@@ -42,7 +42,12 @@ const AIDebug = () => {
   const [editSlowModel, setEditSlowModel] = useState('')
   const [editApiKey, setEditApiKey] = useState('')
   const [editBaseUrl, setEditBaseUrl] = useState('')
+  const [editOcrProvider, setEditOcrProvider] = useState('')
+  const [editOcrModel, setEditOcrModel] = useState('')
+  const [editOcrApiKey, setEditOcrApiKey] = useState('')
+  const [editOcrBaseUrl, setEditOcrBaseUrl] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  const [showOcrApiKey, setShowOcrApiKey] = useState(false)
   const [isCustomFastModel, setIsCustomFastModel] = useState(false)
   const [isCustomSlowModel, setIsCustomSlowModel] = useState(false)
   const [customFastModelName, setCustomFastModelName] = useState('')
@@ -76,6 +81,10 @@ const AIDebug = () => {
       setEditSlowModel(nextSlowModel)
       setEditApiKey('')
       setEditBaseUrl(fullConfig.base_url)
+      setEditOcrProvider(fullConfig.ocr_provider || '')
+      setEditOcrModel(fullConfig.ocr_model || '')
+      setEditOcrApiKey('')
+      setEditOcrBaseUrl(fullConfig.ocr_base_url || '')
       setIsCustomFastModel(false)
       setIsCustomSlowModel(false)
       setCustomFastModelName('')
@@ -86,6 +95,10 @@ const AIDebug = () => {
       setEditSlowModel('')
       setEditApiKey('')
       setEditBaseUrl('')
+      setEditOcrProvider('')
+      setEditOcrModel('')
+      setEditOcrApiKey('')
+      setEditOcrBaseUrl('')
       setIsCustomFastModel(false)
       setIsCustomSlowModel(false)
       setCustomFastModelName('')
@@ -157,6 +170,13 @@ const AIDebug = () => {
     setTestResult(null)
   }
 
+  const handleOcrProviderChange = (value: string) => {
+    setEditOcrProvider(value)
+    if (value && presets[value]) {
+      setEditOcrBaseUrl(presets[value].base_url || '')
+    }
+  }
+
   const handleTestConnection = async () => {
     setIsTesting(true)
     setTestResult(null)
@@ -185,9 +205,15 @@ const AIDebug = () => {
       fast_model: fastModel,
       slow_model: slowModel,
       base_url: editBaseUrl,
+      ocr_provider: editOcrProvider,
+      ocr_model: editOcrModel,
+      ocr_base_url: editOcrBaseUrl,
     }
     if (editApiKey) {
       config.api_key = editApiKey
+    }
+    if (editOcrApiKey) {
+      config.ocr_api_key = editOcrApiKey
     }
     try {
       await updateAIConfig(config)
@@ -293,6 +319,39 @@ const AIDebug = () => {
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{t.console.aiDebug.baseUrl}</span>
                       <span className="text-white text-xs break-all">{fullConfig.base_url}</span>
+                    </div>
+                    <div className="pt-2 border-t border-gray-800">
+                      <div className="text-sm font-medium text-gray-300 mb-3">
+                        {t.console.aiDebug.ocrConfig}
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">{t.console.aiDebug.status}</span>
+                        <span className="text-white">
+                          {fullConfig.ocr_enabled ? t.console.aiDebug.enabled : t.console.aiDebug.disabled}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">{t.console.aiDebug.ocrProvider}</span>
+                        <span className="text-white">{fullConfig.ocr_provider_effective || '-'}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">{t.console.aiDebug.ocrModel}</span>
+                        <span className="text-white">{fullConfig.ocr_model_effective || '-'}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">{t.console.aiDebug.ocrApiKey}</span>
+                        <span className="text-white">
+                          {fullConfig.ocr_api_key_masked
+                            ? `${t.console.aiDebug.maskedKey} (${fullConfig.ocr_api_key_masked})`
+                            : t.console.aiDebug.followAiConfig}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">{t.console.aiDebug.ocrBaseUrl}</span>
+                        <span className="text-white text-xs break-all">
+                          {fullConfig.ocr_base_url_effective || '-'}
+                        </span>
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -459,6 +518,81 @@ const AIDebug = () => {
                   placeholder={t.console.aiDebug.baseUrlPlaceholder}
                   className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
                 />
+              </div>
+
+              <div className="pt-2 border-t border-gray-700/70">
+                <h3 className="text-sm font-medium text-gray-300 mb-3">
+                  {t.console.aiDebug.ocrConfig}
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">{t.console.aiDebug.followAiConfig}</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-1">
+                      {t.console.aiDebug.ocrProvider}
+                    </label>
+                    <select
+                      value={editOcrProvider}
+                      onChange={(e) => handleOcrProviderChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                    >
+                      <option value="">{t.console.aiDebug.ocrProviderPlaceholder}</option>
+                      {presetKeys.map((key) => (
+                        <option key={key} value={key}>
+                          {presets[key].name || key}
+                        </option>
+                      ))}
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-1">
+                      {t.console.aiDebug.ocrModel}
+                    </label>
+                    <input
+                      type="text"
+                      value={editOcrModel}
+                      onChange={(e) => setEditOcrModel(e.target.value)}
+                      placeholder={t.console.aiDebug.ocrModelPlaceholder}
+                      className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-1">
+                      {t.console.aiDebug.ocrApiKey}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showOcrApiKey ? 'text' : 'password'}
+                        value={editOcrApiKey}
+                        onChange={(e) => setEditOcrApiKey(e.target.value)}
+                        placeholder={t.console.aiDebug.ocrApiKeyPlaceholder}
+                        className="w-full px-3 py-2 pr-10 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowOcrApiKey(!showOcrApiKey)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300"
+                      >
+                        {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 text-sm mb-1">
+                      {t.console.aiDebug.ocrBaseUrl}
+                    </label>
+                    <input
+                      type="text"
+                      value={editOcrBaseUrl}
+                      onChange={(e) => setEditOcrBaseUrl(e.target.value)}
+                      placeholder={t.console.aiDebug.ocrBaseUrlPlaceholder}
+                      className="w-full px-3 py-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
+                    />
+                  </div>
+                </div>
               </div>
 
               {testResult && (

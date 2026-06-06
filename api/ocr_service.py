@@ -6,6 +6,61 @@ import re
 import httpx
 
 from ai_service import ai_service
+import db
+
+
+SUPPORTED_OCR_PROVIDERS = {"minimax", "openai", "qwen", "custom"}
+DEFAULT_OCR_MODELS = {
+    "minimax": "MiniMax-M3",
+    "openai": "gpt-4o-mini",
+    "qwen": "qwen-vl-max",
+}
+
+
+def get_effective_ocr_provider() -> str:
+    return (os.getenv("OCR_PROVIDER") or ai_service.provider).lower()
+
+
+def get_effective_ocr_api_key() -> str:
+    return os.getenv("OCR_API_KEY") or ai_service.api_key
+
+
+def get_effective_ocr_base_url() -> str:
+    return os.getenv("OCR_BASE_URL") or ai_service.base_url
+
+
+def get_effective_ocr_model(provider: str | None = None) -> str:
+    if os.getenv("OCR_MODEL"):
+        return os.getenv("OCR_MODEL")
+
+    active_provider = (provider or get_effective_ocr_provider()).lower()
+    return DEFAULT_OCR_MODELS.get(active_provider, ai_service.model)
+
+
+def is_multimodal_ocr_enabled() -> bool:
+    provider = get_effective_ocr_provider()
+    api_key = get_effective_ocr_api_key()
+    return bool(api_key) and provider in SUPPORTED_OCR_PROVIDERS
+
+
+def load_persisted_ocr_config():
+    """控制台持久化 OCR 配置优先于 .env。"""
+    try:
+        provider = db.get_config("ocr_provider")
+        model = db.get_config("ocr_model")
+        api_key = db.get_config("ocr_api_key")
+        base_url = db.get_config("ocr_base_url")
+    except Exception:
+        return
+
+    if provider is not None:
+        os.environ["OCR_PROVIDER"] = provider
+    if model is not None:
+        os.environ["OCR_MODEL"] = model
+    if api_key is not None:
+        os.environ["OCR_API_KEY"] = api_key
+    if base_url is not None:
+        os.environ["OCR_BASE_URL"] = base_url
 
 
 # ---------------------------------------------------------------------------
@@ -28,22 +83,12 @@ async def extract_text_from_base64(
 
     # 1. 优先使用多模态大模型
     try:
-        ocr_provider = os.getenv("OCR_PROVIDER") or ai_service.provider
-        ocr_api_key = os.getenv("OCR_API_KEY") or ai_service.api_key
-        ocr_base_url = os.getenv("OCR_BASE_URL") or ai_service.base_url
+        ocr_provider = get_effective_ocr_provider()
+        ocr_api_key = get_effective_ocr_api_key()
+        ocr_base_url = get_effective_ocr_base_url()
+        ocr_model = get_effective_ocr_model(ocr_provider)
 
-        ocr_model = os.getenv("OCR_MODEL")
-        if not ocr_model:
-            if ocr_provider == "minimax":
-                ocr_model = "MiniMax-M3"
-            elif ocr_provider == "openai":
-                ocr_model = "gpt-4o-mini"
-            elif ocr_provider == "qwen":
-                ocr_model = "qwen-vl-max"
-            else:
-                ocr_model = ai_service.model
-
-        if ocr_api_key and ocr_provider in ["minimax", "openai", "qwen", "custom"]:
+        if ocr_api_key and ocr_provider in SUPPORTED_OCR_PROVIDERS:
             text = await _multimodal_ocr(
                 base64_data=base64_data,
                 api_key=ocr_api_key,
