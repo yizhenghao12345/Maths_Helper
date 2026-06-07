@@ -39,6 +39,8 @@ export const zhCN = {
     recognizeImage: '识别图片文字',
     ocrModelLabel: '识别模型：',
     recognizing: '识别中...',
+    resultLabel: '题目内容',
+    resultReady: '识别结果已填入',
     preview: '预览',
     startDeduction: '开始推演',
     parsing: '解析中...',

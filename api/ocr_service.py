@@ -396,7 +396,7 @@ async def _multimodal_ocr(
             "3. If multiple unrelated problems or repeated OCR text blocks are visible, choose the clearest and most prominent actual math problem area only.\n"
             "4. Preserve the original problem numbering and subquestion numbering when visible.\n"
             "5. Transcribe the problem text faithfully, including text below or beside any figure.\n"
-            "6. Use LaTeX for every math symbol and formula (e.g. $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
+            "6. Prefer readable plain-text math notation for simple symbols: △ABC, ∠ACB=90°, cos∠DCB, BC=4. Do not wrap isolated letters, numbers, or short expressions in $...$. Use LaTeX only when plain text would be unclear, such as fractions or roots.\n"
             "7. Before output, check whether the extracted problem is coherent. Correct only obvious OCR mistakes in math symbols, LaTeX, spacing, punctuation, or line breaks when the correction is unambiguous. Do NOT invent missing conditions or solve the problem.\n"
             "8. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
             "   - Shape type and vertex labels with positions.\n"
@@ -416,7 +416,7 @@ async def _multimodal_ocr(
             "3. 如果图片里有多个互不相关的题目，或同一题目被页面重复展示，只选择最清晰、最主要的实际题目区域。\n"
             "4. 保留原题号和小问编号；不要把同一大题的小问误删。\n"
             "5. 原文转录题干文字，包括图形下方或旁边与题目相关的说明文字。\n"
-            "6. 所有数学符号和公式使用 LaTeX 语法（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
+            "6. 简单数学符号优先使用可读的普通文本：△ABC、∠ACB=90°、cos∠DCB、BC=4。不要给单个字母、数字或短表达式套 $...$。只有分式、根式等普通文本不清楚时才使用 LaTeX。\n"
             "7. 输出前检查题目是否通顺合理。仅在确定无歧义时修正明显 OCR 错误，例如数学符号、LaTeX、空格、标点或换行错误；不要补造缺失条件，不要解题。\n"
             "8. 如果图中有几何图形，请在题目文字之后简要描述：\n"
             "   - 图形类型和各顶点标注与位置。\n"
@@ -500,6 +500,7 @@ def _extract_primary_problem_text(text: str) -> str:
 def _polish_problem_text(text: str) -> str:
     text = text.strip()
     text = re.sub(r"^(?:题目|主要题目|核心题目|问题|Problem)\s*[:：]\s*", "", text, flags=re.IGNORECASE)
+    text = _normalize_math_notation(text)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r" *\n *", "\n", text)
     text = re.sub(r"\\+\s*(triangle|angle|cos|sin|tan|sqrt|frac|overline|parallel|perp)\b", r"\\\1", text)
@@ -510,6 +511,37 @@ def _polish_problem_text(text: str) -> str:
     text = re.sub(r"\s+([）)])", r"\1", text)
     text = re.sub(r"([=<>≤≥])\s+", r"\1", text)
     text = re.sub(r"\s+([=<>≤≥])", r"\1", text)
+    text = re.sub(r"([\u4e00-\u9fff])\s+([△∠A-Za-z0-9])", r"\1\2", text)
+    text = re.sub(r"([A-Za-z0-9°])\s+([\u4e00-\u9fff])", r"\1\2", text)
+    return text
+
+
+def _normalize_math_notation(text: str) -> str:
+    replacements = (
+        (r"\\left\s*", ""),
+        (r"\\right\s*", ""),
+        (r"\\triangle\s*([A-Za-z]{3})", r"△\1"),
+        (r"\\angle\s*([A-Za-z0-9]+)", r"∠\1"),
+        (r"\\(?:overline|bar)\{([^{}]+)\}", r"\1"),
+        (r"\\(?:leq|le)\b", "≤"),
+        (r"\\(?:geq|ge)\b", "≥"),
+        (r"\\neq\b", "≠"),
+        (r"\\parallel\b", "∥"),
+        (r"\\perp\b", "⊥"),
+        (r"\\cdot\b", "·"),
+        (r"\\times\b", "×"),
+        (r"\\div\b", "÷"),
+        (r"\\circ\b", "°"),
+        (r"\\(cos|sin|tan)\b\s*", r"\1"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    text = re.sub(r"\^\s*\{?\s*°\s*\}?", "°", text)
+    text = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"\1/\2", text)
+    text = re.sub(r"\$([^$\n]+)\$", lambda match: match.group(1).strip(), text)
+    text = re.sub(r"(?<!\\)\$", "", text)
+    text = text.replace("\\,", "").replace("\\ ", " ")
     return text
 
 

@@ -41,6 +41,8 @@ export const enUS: typeof zhCN = {
     recognizeImage: 'Recognize Text from Image',
     ocrModelLabel: 'Recognition model: ',
     recognizing: 'Recognizing...',
+    resultLabel: 'Problem Content',
+    resultReady: 'Recognition filled in',
     preview: 'Preview',
     startDeduction: 'Start Deduction',
     parsing: 'Parsing...',
