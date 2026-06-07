@@ -9,7 +9,43 @@ import db
 def mask_api_key(key: str) -> str:
     if not key or len(key) <= 8:
         return "***" if key else ""
-    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+    return f"{key[:4]}...{key[-4:]}"
+
+
+def _content_to_text(content) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text") or item.get("content") or ""))
+            else:
+                parts.append(str(item))
+        return "".join(parts)
+    return str(content)
+
+
+def _extract_chat_preview(data: dict) -> tuple[str, str]:
+    raw_preview = json.dumps(data, ensure_ascii=False)[:1000]
+    choices = data.get("choices") or []
+    if choices:
+        choice = choices[0] or {}
+        message = choice.get("message") or {}
+        preview = (
+            _content_to_text(message.get("content"))
+            or _content_to_text(message.get("reasoning_content"))
+            or _content_to_text(choice.get("text"))
+        ).strip()
+        return preview[:200], raw_preview
+    preview = (
+        _content_to_text(data.get("output_text"))
+        or _content_to_text(data.get("result"))
+        or _content_to_text(data.get("text"))
+    ).strip()
+    return preview[:200], raw_preview
 
 
 PROVIDER_PRESETS = {
@@ -523,20 +559,20 @@ class AIService:
             return {"success": False, "message": "API密钥不能为空"}
 
         try:
-            test_prompt = "请简短回复一句话，确认连接正常。"
+            test_prompt = "Calculate 1+1. Reply with only the number 2."
             messages = [{"role": "user", "content": test_prompt}]
             if provider == "baidu":
                 url = f"{base_url}/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions"
                 params = {"access_token": api_key}
                 payload = {
                     "messages": messages,
-                    "max_output_tokens": 8,
+                    "max_output_tokens": 32,
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(url, params=params, json=payload)
                     response.raise_for_status()
                     data = response.json()
-                    preview = (data.get("result") or "").strip()[:100]
+                    preview, raw_preview = _extract_chat_preview(data)
             else:
                 url = f"{base_url}/chat/completions"
                 headers = {
@@ -547,16 +583,17 @@ class AIService:
                     "model": model,
                     "messages": messages,
                     "temperature": 0,
-                    "max_tokens": 8,
+                    "max_tokens": 64,
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(url, headers=headers, json=payload)
                     response.raise_for_status()
                     data = response.json()
-                    preview = (data["choices"][0]["message"]["content"] or "").strip()[:100]
+                    preview, raw_preview = _extract_chat_preview(data)
 
             success = bool(preview)
             message = "连接成功，模型返回有效测试响应" if success else "连接成功，但模型返回内容为空"
+            response_summary = preview or raw_preview
             try:
                 db.add_ai_log(
                     session_id=None,
@@ -566,14 +603,14 @@ class AIService:
                     used_parsed_problem=False,
                     parsed_problem_title=None,
                     request_summary=test_prompt,
-                    response_summary=preview,
+                    response_summary=response_summary,
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=success,
-                    error_message="" if success else message,
+                    error_message="" if success else f"{message}; raw_response={raw_preview}",
                 )
             except Exception:
                 pass
-            return {"success": success, "message": message, "response_preview": preview}
+            return {"success": success, "message": message, "response_preview": preview or raw_preview}
         except httpx.HTTPStatusError as e:
             error_detail = e.response.text[:500] if e.response is not None else str(e)
             message = f"HTTP {e.response.status_code}: {error_detail}" if e.response is not None else str(e)
@@ -585,7 +622,7 @@ class AIService:
                     method="test_connection",
                     used_parsed_problem=False,
                     parsed_problem_title=None,
-                    request_summary="请简短回复一句话，确认连接正常。",
+                    request_summary="Calculate 1+1. Reply with only the number 2.",
                     response_summary="",
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=False,
@@ -603,7 +640,7 @@ class AIService:
                     method="test_connection",
                     used_parsed_problem=False,
                     parsed_problem_title=None,
-                    request_summary="请简短回复一句话，确认连接正常。",
+                    request_summary="Calculate 1+1. Reply with only the number 2.",
                     response_summary="",
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=False,

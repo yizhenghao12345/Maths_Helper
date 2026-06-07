@@ -336,9 +336,9 @@ const AIDebug = () => {
                         {fullConfig.slow_model || fullConfig.fast_model || fullConfig.model}
                       </span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">{t.console.aiDebug.apiKey}</span>
-                      <span className="text-white">
+                    <div className="flex items-start justify-between gap-4 text-sm">
+                      <span className="text-gray-500 shrink-0">{t.console.aiDebug.apiKey}</span>
+                      <span className="text-white min-w-0 text-right truncate">
                         {fullConfig.api_key_masked
                           ? `${t.console.aiDebug.maskedKey} (${fullConfig.api_key_masked})`
                           : t.console.aiDebug.noKey}
@@ -360,9 +360,9 @@ const AIDebug = () => {
                         <span className="text-gray-500">{t.console.aiDebug.model}</span>
                         <span className="text-white">{fullConfig.ocr.model}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">{t.console.aiDebug.apiKey}</span>
-                        <span className="text-white">
+                      <div className="flex items-start justify-between gap-4 text-sm">
+                        <span className="text-gray-500 shrink-0">{t.console.aiDebug.apiKey}</span>
+                        <span className="text-white min-w-0 text-right truncate">
                           {fullConfig.ocr.api_key_masked
                             ? `${t.console.aiDebug.maskedKey} (${fullConfig.ocr.api_key_masked})`
                             : t.console.aiDebug.noKey}
