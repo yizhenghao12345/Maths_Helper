@@ -33,6 +33,10 @@ OCR_UI_NOISE_PATTERNS = (
     r"上传图片",
     r"识别模型",
     r"开始推演",
+    r"^答案[:：]",
+    r"^解析[:：]",
+    r"^解答[:：]",
+    r"^提示[:：]",
     r"MiniMax",
     r"Tesseract",
     r"Recognition model",
@@ -393,12 +397,13 @@ async def _multimodal_ocr(
             "4. Preserve the original problem numbering and subquestion numbering when visible.\n"
             "5. Transcribe the problem text faithfully, including text below or beside any figure.\n"
             "6. Use LaTeX for every math symbol and formula (e.g. $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
-            "7. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
+            "7. Before output, check whether the extracted problem is coherent. Correct only obvious OCR mistakes in math symbols, LaTeX, spacing, punctuation, or line breaks when the correction is unambiguous. Do NOT invent missing conditions or solve the problem.\n"
+            "8. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
             "   - Shape type and vertex labels with positions.\n"
             "   - Key interior/boundary points and how they divide the sides.\n"
             "   - Which line segments are drawn and any labeled intersection points.\n"
             "   - Any shaded or colored region and its vertices.\n"
-            "8. Output ONLY the selected main problem and its own subquestions (and figure description if needed).\n"
+            "9. Output ONLY the selected main problem and its own subquestions (and figure description if needed).\n"
             "   Do NOT add any explanation, solution steps, opening remarks, or UI text."
         )
     else:
@@ -412,12 +417,13 @@ async def _multimodal_ocr(
             "4. 保留原题号和小问编号；不要把同一大题的小问误删。\n"
             "5. 原文转录题干文字，包括图形下方或旁边与题目相关的说明文字。\n"
             "6. 所有数学符号和公式使用 LaTeX 语法（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
-            "7. 如果图中有几何图形，请在题目文字之后简要描述：\n"
+            "7. 输出前检查题目是否通顺合理。仅在确定无歧义时修正明显 OCR 错误，例如数学符号、LaTeX、空格、标点或换行错误；不要补造缺失条件，不要解题。\n"
+            "8. 如果图中有几何图形，请在题目文字之后简要描述：\n"
             "   - 图形类型和各顶点标注与位置。\n"
             "   - 图形内部或边上的关键标注点及位置关系。\n"
             "   - 图中连接了哪些线段，以及标注的交点。\n"
             "   - 有颜色或阴影的区域及其顶点。\n"
-            "8. 只输出选中的主题目及其所属小问（必要时附简短图形描述），不要加前言、解题过程、解释或 UI 文案。"
+            "9. 只输出选中的主题目及其所属小问（必要时附简短图形描述），不要加前言、解题过程、解释或 UI 文案。"
         )
 
     headers = {
@@ -481,12 +487,30 @@ def _extract_primary_problem_text(text: str) -> str:
     if not cleaned:
         return text.strip()
 
+    cleaned = _polish_problem_text(cleaned)
     match = OCR_PROBLEM_START_PATTERN.search(cleaned)
     if match:
         cleaned = cleaned[match.start():].strip()
 
+    cleaned = _polish_problem_text(cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def _polish_problem_text(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"^(?:题目|主要题目|核心题目|问题|Problem)\s*[:：]\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\\+\s*(triangle|angle|cos|sin|tan|sqrt|frac|overline|parallel|perp)\b", r"\\\1", text)
+    text = re.sub(r"\$\s+", "$", text)
+    text = re.sub(r"\s+\$", "$", text)
+    text = re.sub(r"\s+([，。；：、？！,.?;:])", r"\1", text)
+    text = re.sub(r"([（(])\s+", r"\1", text)
+    text = re.sub(r"\s+([）)])", r"\1", text)
+    text = re.sub(r"([=<>≤≥])\s+", r"\1", text)
+    text = re.sub(r"\s+([=<>≤≥])", r"\1", text)
+    return text
 
 
 # ---------------------------------------------------------------------------
