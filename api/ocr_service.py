@@ -11,7 +11,6 @@ from ai_service import ai_service, mask_api_key
 import db
 
 
-OCR_LOG_PREVIEW_LIMIT = 200
 OCR_DEFAULT_PROVIDER = "minimax"
 OCR_DEFAULT_BASE_URL = "https://api.minimaxi.com/v1"
 OCR_DEFAULT_MODELS = {
@@ -167,7 +166,7 @@ def _log_ocr_event(
     response_text: str = "",
     error_message: str = "",
 ):
-    response_summary = (response_text or "")[:OCR_LOG_PREVIEW_LIMIT]
+    response_summary = response_text or ""
     error_summary = (error_message or "")[:500]
     status = "成功" if success else "失败"
     print(

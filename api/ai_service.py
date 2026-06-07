@@ -523,7 +523,8 @@ class AIService:
             return {"success": False, "message": "API密钥不能为空"}
 
         try:
-            messages = [{"role": "user", "content": "Return exactly OK."}]
+            test_prompt = "请简短回复一句话，确认连接正常。"
+            messages = [{"role": "user", "content": test_prompt}]
             if provider == "baidu":
                 url = f"{base_url}/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions"
                 params = {"access_token": api_key}
@@ -554,8 +555,8 @@ class AIService:
                     data = response.json()
                     preview = (data["choices"][0]["message"]["content"] or "").strip()[:100]
 
-            success = bool(preview) and "ok" in preview.lower()
-            message = "连接成功，模型返回有效测试响应" if success else "连接成功，但模型未返回预期测试内容"
+            success = bool(preview)
+            message = "连接成功，模型返回有效测试响应" if success else "连接成功，但模型返回内容为空"
             try:
                 db.add_ai_log(
                     session_id=None,
@@ -564,7 +565,7 @@ class AIService:
                     method="test_connection",
                     used_parsed_problem=False,
                     parsed_problem_title=None,
-                    request_summary="Return exactly OK.",
+                    request_summary=test_prompt,
                     response_summary=preview,
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=success,
@@ -584,7 +585,7 @@ class AIService:
                     method="test_connection",
                     used_parsed_problem=False,
                     parsed_problem_title=None,
-                    request_summary="Return exactly OK.",
+                    request_summary="请简短回复一句话，确认连接正常。",
                     response_summary="",
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=False,
@@ -602,7 +603,7 @@ class AIService:
                     method="test_connection",
                     used_parsed_problem=False,
                     parsed_problem_title=None,
-                    request_summary="Return exactly OK.",
+                    request_summary="请简短回复一句话，确认连接正常。",
                     response_summary="",
                     duration_ms=int((time.time() - started_at) * 1000),
                     success=False,
@@ -638,7 +639,7 @@ class AIService:
         if not self.enabled:
             raise ValueError("AI服务未配置,请设置 AI_API_KEY 环境变量")
 
-        request_summary = json.dumps(messages, ensure_ascii=False)[:200]
+        request_summary = json.dumps(messages, ensure_ascii=False)
         start_time = time.time()
         success = True
         error_message = None
@@ -663,7 +664,7 @@ class AIService:
             raise Exception(f"AI服务调用失败: {str(e)}")
         finally:
             duration_ms = int((time.time() - start_time) * 1000)
-            response_summary = result[:200] if result else ""
+            response_summary = result or ""
             if not success:
                 response_summary = ""
             try:

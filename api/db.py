@@ -13,8 +13,20 @@ def _json_serial(obj):
 
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "maths_helper.db")
+AI_LOG_TEXT_MAX_CHARS = 50000
+AI_LOG_TITLE_MAX_CHARS = 5000
+AI_LOG_ERROR_MAX_CHARS = 5000
 
 _lock = threading.Lock()
+
+
+def _limit_text(value: Optional[str], max_chars: int) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars]}\n...[truncated, original_length={len(text)}]"
 
 
 def _get_conn() -> sqlite3.Connection:
@@ -267,6 +279,11 @@ def add_ai_log(
     success: bool,
     error_message: str,
 ):
+    parsed_problem_title = _limit_text(parsed_problem_title, AI_LOG_TITLE_MAX_CHARS)
+    request_summary = _limit_text(request_summary, AI_LOG_TEXT_MAX_CHARS) or ""
+    response_summary = _limit_text(response_summary, AI_LOG_TEXT_MAX_CHARS) or ""
+    error_message = _limit_text(error_message, AI_LOG_ERROR_MAX_CHARS)
+
     with _lock:
         conn = _get_conn()
         try:
