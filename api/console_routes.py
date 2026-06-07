@@ -13,6 +13,7 @@ from console_auth import (
 )
 import db
 from ai_service import ai_service, PROVIDER_PRESETS, mask_api_key
+from ocr_service import get_ocr_full_config, get_ocr_runtime_config, test_ocr_connection
 
 
 router = APIRouter(prefix="/console", tags=["console"])
@@ -29,6 +30,10 @@ class AIConfigRequest(BaseModel):
     slow_model: Optional[str] = None
     api_key: Optional[str] = None
     base_url: Optional[str] = None
+    ocr_provider: Optional[str] = None
+    ocr_model: Optional[str] = None
+    ocr_api_key: Optional[str] = None
+    ocr_base_url: Optional[str] = None
 
 
 class SettingsRequest(BaseModel):
@@ -37,9 +42,10 @@ class SettingsRequest(BaseModel):
 
 class TestConnectionRequest(BaseModel):
     provider: str
-    api_key: str
+    api_key: Optional[str] = None
     base_url: str
     model: str
+    target: str = "ai"
 
 
 @router.post("/login")
@@ -88,6 +94,7 @@ async def health(user=Depends(get_current_console_user)):
     db_path = db.DB_PATH
     db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
     session_count = db.get_stats()["total_sessions"]
+    ocr_config = get_ocr_full_config()
     return {
         "status": "ok",
         "version": "0.1.5",
@@ -97,6 +104,10 @@ async def health(user=Depends(get_current_console_user)):
         "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
         "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
         "ai_base_url": ai_service.base_url if ai_service.enabled else None,
+        "ocr_enabled": ocr_config["enabled"],
+        "ocr_provider": ocr_config["provider"],
+        "ocr_model": ocr_config["model"],
+        "ocr_base_url": ocr_config["base_url"],
         "db_size": db_size,
         "session_count": session_count,
     }
@@ -189,18 +200,28 @@ async def get_providers(user=Depends(get_current_console_user)):
 async def test_connection(
     request: TestConnectionRequest, user=Depends(get_current_console_user)
 ):
-    result = await ai_service.test_connection(
-        provider=request.provider,
-        api_key=request.api_key,
-        base_url=request.base_url,
-        model=request.model,
-    )
+    target = (request.target or "ai").lower()
+    if target == "ocr":
+        ocr_config = get_ocr_runtime_config()
+        result = await test_ocr_connection(
+            provider=request.provider or ocr_config["provider"],
+            api_key=request.api_key or ocr_config["api_key"],
+            base_url=request.base_url or ocr_config["base_url"],
+            model=request.model or ocr_config["model"],
+        )
+    else:
+        result = await ai_service.test_connection(
+            provider=request.provider or ai_service.provider,
+            api_key=request.api_key or ai_service.api_key,
+            base_url=request.base_url or ai_service.base_url,
+            model=request.model or ai_service.model,
+        )
     return result
 
 
 @router.get("/ai-config")
 async def get_ai_config(user=Depends(get_current_console_user)):
-    return ai_service.get_full_config()
+    return {**ai_service.get_full_config(), "ocr": get_ocr_full_config()}
 
 
 @router.patch("/ai-config")
@@ -241,6 +262,18 @@ async def update_ai_config(
         ai_service.base_url = request.base_url
         os.environ["AI_BASE_URL"] = request.base_url
         db.set_config("ai_base_url", request.base_url)
+    if request.ocr_provider is not None:
+        os.environ["OCR_PROVIDER"] = request.ocr_provider
+        db.set_config("ocr_provider", request.ocr_provider)
+    if request.ocr_model is not None:
+        os.environ["OCR_MODEL"] = request.ocr_model
+        db.set_config("ocr_model", request.ocr_model)
+    if request.ocr_api_key is not None:
+        os.environ["OCR_API_KEY"] = request.ocr_api_key
+        db.set_config("ocr_api_key", request.ocr_api_key)
+    if request.ocr_base_url is not None:
+        os.environ["OCR_BASE_URL"] = request.ocr_base_url
+        db.set_config("ocr_base_url", request.ocr_base_url)
     return {
         "provider": ai_service.provider,
         "model": ai_service.model,
@@ -249,4 +282,5 @@ async def update_ai_config(
         "enabled": ai_service.enabled,
         "base_url": ai_service.base_url,
         "api_key_masked": mask_api_key(ai_service.api_key),
+        "ocr": get_ocr_full_config(),
     }

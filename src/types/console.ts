@@ -63,6 +63,10 @@ export interface ConsoleHealth {
   ai_model: string | null
   ai_fast_model?: string | null
   ai_slow_model?: string | null
+  ocr_enabled?: boolean
+  ocr_provider?: string | null
+  ocr_model?: string | null
+  ocr_base_url?: string | null
   db_size: number
   session_count: number
 }
@@ -74,6 +78,10 @@ export interface AIConfigUpdate {
   slow_model?: string
   api_key?: string
   base_url?: string
+  ocr_provider?: string
+  ocr_model?: string
+  ocr_api_key?: string
+  ocr_base_url?: string
 }
 
 export interface ProviderPreset {
@@ -92,6 +100,13 @@ export interface AIFullConfig {
   api_key_masked: string
   base_url: string
   enabled: boolean
+  ocr: {
+    provider: string
+    model: string
+    api_key_masked: string
+    base_url: string
+    enabled: boolean
+  }
 }
 
 export interface ConnectionTestResult {

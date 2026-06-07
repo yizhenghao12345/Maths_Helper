@@ -3,6 +3,7 @@ import { Trash2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
 import { useConsoleStore } from '@/store/useConsoleStore'
 import { getConsoleSessions, getConsoleSessionDetail, deleteConsoleSession, cleanupExpiredSessions } from '@/api/console'
+import { formatShanghaiTime } from '@/lib/utils'
 import type { ConsoleSessionDetail } from '@/types/console'
 
 const Sessions = () => {
@@ -175,8 +176,8 @@ const Sessions = () => {
                         {session.is_completed ? t.console.sessions.completed : t.console.sessions.active}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-400 text-sm">{new Date(session.created_at).toLocaleString()}</td>
-                    <td className="px-4 py-3 text-gray-400 text-sm">{new Date(session.last_active).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-gray-400 text-sm">{formatShanghaiTime(session.created_at)}</td>
+                    <td className="px-4 py-3 text-gray-400 text-sm">{formatShanghaiTime(session.last_active)}</td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={(e) => {

@@ -7,11 +7,180 @@ import uuid
 
 import httpx
 
-from ai_service import ai_service
+from ai_service import ai_service, mask_api_key
 import db
 
 
-OCR_LOG_PREVIEW_LIMIT = 200
+OCR_DEFAULT_PROVIDER = "minimax"
+OCR_DEFAULT_BASE_URL = "https://api.minimaxi.com/v1"
+OCR_DEFAULT_MODELS = {
+    "minimax": "MiniMax-M3",
+    "openai": "gpt-4o-mini",
+    "qwen": "qwen-vl-max",
+}
+OCR_UI_NOISE_PATTERNS = (
+    r"^\d{1,2}:\d{2}$",
+    r"^\d+\s*(字|chars?)$",
+    r"^https?://",
+    r"^[\w.-]+\.(com|cn|net|org)",
+    r"AI数学思维动态推演器",
+    r"maths-dev",
+    r"返回首页",
+    r"输入题目",
+    r"输入你要解决的数学题目",
+    r"系统将为你生成",
+    r"识别图片文字",
+    r"上传图片",
+    r"识别模型",
+    r"开始推演",
+    r"^答案[:：]",
+    r"^解析[:：]",
+    r"^解答[:：]",
+    r"^提示[:：]",
+    r"MiniMax",
+    r"Tesseract",
+    r"Recognition model",
+    r"Upload Image",
+    r"Start Deduction",
+)
+OCR_PROBLEM_START_PATTERN = re.compile(
+    r"(^|\n)\s*(?:\d+\s*[.．、]|[（(]?\d+[）)]|如图|已知|求|证明|计算|解|设|若|在\s*[$\\]?(?:triangle|△)|In\s+)",
+    re.IGNORECASE,
+)
+
+
+def _get_stored_config(key: str) -> str | None:
+    try:
+        value = db.get_config(key)
+    except Exception:
+        return None
+    return value if value is not None else None
+
+
+def _resolve_ocr_model(provider: str, stored_model: str | None = None) -> str:
+    if stored_model:
+        return stored_model
+    return OCR_DEFAULT_MODELS.get(provider, ai_service.model)
+
+
+def get_ocr_full_config() -> dict:
+    provider = (
+        _get_stored_config("ocr_provider")
+        or os.getenv("OCR_PROVIDER")
+        or OCR_DEFAULT_PROVIDER
+    ).lower()
+    api_key = _get_stored_config("ocr_api_key")
+    if api_key is None:
+        api_key = os.getenv("OCR_API_KEY", "")
+    base_url = (
+        _get_stored_config("ocr_base_url")
+        or os.getenv("OCR_BASE_URL")
+        or OCR_DEFAULT_BASE_URL
+    )
+    model = _resolve_ocr_model(
+        provider,
+        _get_stored_config("ocr_model") or os.getenv("OCR_MODEL"),
+    )
+    return {
+        "provider": provider,
+        "model": model,
+        "api_key_masked": mask_api_key(api_key),
+        "base_url": base_url,
+        "enabled": bool(api_key),
+    }
+
+
+def get_ocr_runtime_config() -> dict:
+    config = get_ocr_full_config()
+    api_key = _get_stored_config("ocr_api_key")
+    if api_key is None:
+        api_key = os.getenv("OCR_API_KEY", "")
+    return {**config, "api_key": api_key}
+
+
+def _create_ocr_test_image_base64() -> str:
+    from PIL import Image, ImageDraw
+
+    image = Image.new("RGB", (240, 90), "white")
+    draw = ImageDraw.Draw(image)
+    draw.text((36, 28), "2 + 5 = 7", fill="black")
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+
+async def test_ocr_connection(
+    *,
+    provider: str,
+    api_key: str,
+    base_url: str,
+    model: str,
+    language: str = "zh-CN",
+) -> dict:
+    provider = (provider or "").lower().strip()
+    api_key = (api_key or "").strip()
+    base_url = (base_url or "").rstrip("/")
+    model = (model or "").strip()
+    request_id = uuid.uuid4().hex[:8]
+    started_at = time.time()
+
+    if not provider or not model or not base_url:
+        return {"success": False, "message": "OCR供应商、模型和基础URL不能为空"}
+    if not api_key:
+        return {"success": False, "message": "OCR API密钥不能为空"}
+    if provider not in ["minimax", "openai", "qwen", "custom"]:
+        return {"success": False, "message": f"不支持的 OCR_PROVIDER: {provider}"}
+
+    try:
+        image_base64 = _create_ocr_test_image_base64()
+        text = await _multimodal_ocr(
+            base64_data=image_base64,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            language=language,
+        )
+        normalized = re.sub(r"\s+", "", text or "")
+        success = all(part in normalized for part in ("2", "5", "7"))
+        message = "OCR连接成功，模型返回有效图片识别结果" if success else "OCR连接成功，但未识别出预期测试内容"
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=success,
+            request_id=request_id,
+            response_text=text,
+            error_message="" if success else message,
+        )
+        return {"success": success, "message": message, "response_preview": text[:100]}
+    except httpx.HTTPStatusError as e:
+        error_detail = e.response.text[:500] if e.response is not None else str(e)
+        message = f"HTTP {e.response.status_code}: {error_detail}" if e.response is not None else str(e)
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=message,
+        )
+        return {"success": False, "message": message}
+    except Exception as e:
+        _log_ocr_event(
+            method="ocr:test_multimodal",
+            provider=provider,
+            model=model,
+            language=language,
+            duration_ms=int((time.time() - started_at) * 1000),
+            success=False,
+            request_id=request_id,
+            error_message=str(e),
+        )
+        return {"success": False, "message": str(e)}
 
 
 def _log_ocr_event(
@@ -26,7 +195,7 @@ def _log_ocr_event(
     response_text: str = "",
     error_message: str = "",
 ):
-    response_summary = (response_text or "")[:OCR_LOG_PREVIEW_LIMIT]
+    response_summary = response_text or ""
     error_summary = (error_message or "")[:500]
     status = "成功" if success else "失败"
     print(
@@ -106,20 +275,11 @@ async def extract_text_from_base64(
     # 1. 优先使用多模态大模型
     try:
         multimodal_start = time.time()
-        ocr_provider = os.getenv("OCR_PROVIDER") or ai_service.provider
-        ocr_api_key = os.getenv("OCR_API_KEY") or ai_service.api_key
-        ocr_base_url = os.getenv("OCR_BASE_URL") or ai_service.base_url
-
-        ocr_model = os.getenv("OCR_MODEL")
-        if not ocr_model:
-            if ocr_provider == "minimax":
-                ocr_model = "MiniMax-M3"
-            elif ocr_provider == "openai":
-                ocr_model = "gpt-4o-mini"
-            elif ocr_provider == "qwen":
-                ocr_model = "qwen-vl-max"
-            else:
-                ocr_model = ai_service.model
+        ocr_config = get_ocr_runtime_config()
+        ocr_provider = ocr_config["provider"]
+        ocr_api_key = ocr_config["api_key"]
+        ocr_base_url = ocr_config["base_url"]
+        ocr_model = ocr_config["model"]
 
         if ocr_api_key and ocr_provider in ["minimax", "openai", "qwen", "custom"]:
             text = await _multimodal_ocr(
@@ -180,6 +340,7 @@ async def extract_text_from_base64(
     try:
         image_bytes = base64.b64decode(raw_base64)
         text = _simple_ocr(image_bytes)
+        cleaned_text = _extract_primary_problem_text(text)
         success = bool(text) and not text.startswith(("OCR 识别失败:", "未安装 OCR 依赖。"))
         _log_ocr_event(
             method="ocr:tesseract",
@@ -189,10 +350,10 @@ async def extract_text_from_base64(
             duration_ms=int((time.time() - tesseract_start) * 1000),
             success=success,
             request_id=request_id,
-            response_text=text if success else "",
+            response_text=cleaned_text if success else "",
             error_message="" if success else text or "Tesseract 返回空文本",
         )
-        return {"text": text, "model_used": "Tesseract"}
+        return {"text": cleaned_text if success else text, "model_used": "Tesseract"}
     except Exception as e:
         _log_ocr_event(
             method="ocr:tesseract",
@@ -228,31 +389,41 @@ async def _multimodal_ocr(
     if language == "en-US":
         prompt = (
             "You are a high-precision math problem recognition assistant.\n"
-            "Your ONLY task: read all text from this math problem image and output it faithfully.\n\n"
+            "Your ONLY task: extract the main math problem area from the image.\n\n"
             "Rules:\n"
-            "1. Transcribe all visible text exactly, including text below or beside any figure.\n"
-            "2. Use LaTeX for every math symbol and formula (e.g. $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
-            "3. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
+            "1. Keep only the primary math problem statement. If the image is a phone/web screenshot, ignore status bars, app titles, URLs, buttons, upload controls, OCR model labels, word counts, and any surrounding UI text.\n"
+            "2. A single main problem may contain a shared stem plus multiple subquestions such as (1)(2), ①②, I/II, or a/b. Keep all subquestions that belong to that same main problem.\n"
+            "3. If multiple unrelated problems or repeated OCR text blocks are visible, choose the clearest and most prominent actual math problem area only.\n"
+            "4. Preserve the original problem numbering and subquestion numbering when visible.\n"
+            "5. Transcribe the problem text faithfully, including text below or beside any figure.\n"
+            "6. Prefer readable plain-text math notation for simple symbols: △ABC, ∠ACB=90°, cos∠DCB, BC=4. Do not wrap isolated letters, numbers, or short expressions in $...$. Use LaTeX only when plain text would be unclear, such as fractions or roots.\n"
+            "7. Before output, check whether the extracted problem is coherent. Correct only obvious OCR mistakes in math symbols, LaTeX, spacing, punctuation, or line breaks when the correction is unambiguous. Do NOT invent missing conditions or solve the problem.\n"
+            "8. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
             "   - Shape type and vertex labels with positions.\n"
             "   - Key interior/boundary points and how they divide the sides.\n"
             "   - Which line segments are drawn and any labeled intersection points.\n"
             "   - Any shaded or colored region and its vertices.\n"
-            "4. Output ONLY the problem text (and figure description if present).\n"
-            "   Do NOT add any explanation, solution steps, or opening remarks."
+            "9. Output ONLY the selected main problem and its own subquestions (and figure description if needed).\n"
+            "   Do NOT add any explanation, solution steps, opening remarks, or UI text."
         )
     else:
         prompt = (
             "你是一个高精度的数学题目识别助手。\n"
-            "你唯一的任务：读取图片中的数学题目，原文输出。\n\n"
+            "你唯一的任务：从图片中提取最主要的数学题目区域。\n\n"
             "规则：\n"
-            "1. 原文转录图片中所有可见文字，包括图形下方或旁边的说明文字。\n"
-            "2. 所有数学符号和公式使用 LaTeX 语法（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
-            "3. 如果图中有几何图形，请在题目文字之后简要描述：\n"
+            "1. 只保留核心题目内容。如果图片是手机/网页截图，请忽略状态栏、应用标题、网址、按钮、上传控件、识别模型、字数统计、页面说明等 UI 文案。\n"
+            "2. 一个主题目可以包含公共题干和多个小问，例如（1）（2）、①②、I/II、a/b。只要属于同一大题，就必须完整保留这些小问。\n"
+            "3. 如果图片里有多个互不相关的题目，或同一题目被页面重复展示，只选择最清晰、最主要的实际题目区域。\n"
+            "4. 保留原题号和小问编号；不要把同一大题的小问误删。\n"
+            "5. 原文转录题干文字，包括图形下方或旁边与题目相关的说明文字。\n"
+            "6. 简单数学符号优先使用可读的普通文本：△ABC、∠ACB=90°、cos∠DCB、BC=4。不要给单个字母、数字或短表达式套 $...$。只有分式、根式等普通文本不清楚时才使用 LaTeX。\n"
+            "7. 输出前检查题目是否通顺合理。仅在确定无歧义时修正明显 OCR 错误，例如数学符号、LaTeX、空格、标点或换行错误；不要补造缺失条件，不要解题。\n"
+            "8. 如果图中有几何图形，请在题目文字之后简要描述：\n"
             "   - 图形类型和各顶点标注与位置。\n"
             "   - 图形内部或边上的关键标注点及位置关系。\n"
             "   - 图中连接了哪些线段，以及标注的交点。\n"
             "   - 有颜色或阴影的区域及其顶点。\n"
-            "4. 只输出题目内容（及几何描述），不要加任何前言、解题过程或解释。"
+            "9. 只输出选中的主题目及其所属小问（必要时附简短图形描述），不要加前言、解题过程、解释或 UI 文案。"
         )
 
     headers = {
@@ -298,7 +469,80 @@ def _clean_response(raw: str) -> str:
     text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE)
     # 2. 去掉 markdown 代码块包裹
     text = re.sub(r"```[^\n]*\n?", "", text)
-    return text.strip()
+    return _extract_primary_problem_text(text)
+
+
+def _is_ocr_ui_noise(line: str) -> bool:
+    normalized = line.strip()
+    if not normalized:
+        return True
+    return any(re.search(pattern, normalized, flags=re.IGNORECASE) for pattern in OCR_UI_NOISE_PATTERNS)
+
+
+def _extract_primary_problem_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.strip() for line in text.split("\n")]
+    lines = [line for line in lines if not _is_ocr_ui_noise(line)]
+    cleaned = "\n".join(lines).strip()
+    if not cleaned:
+        return text.strip()
+
+    cleaned = _polish_problem_text(cleaned)
+    match = OCR_PROBLEM_START_PATTERN.search(cleaned)
+    if match:
+        cleaned = cleaned[match.start():].strip()
+
+    cleaned = _polish_problem_text(cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _polish_problem_text(text: str) -> str:
+    text = text.strip()
+    text = re.sub(r"^(?:题目|主要题目|核心题目|问题|Problem)\s*[:：]\s*", "", text, flags=re.IGNORECASE)
+    text = _normalize_math_notation(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\\+\s*(triangle|angle|cos|sin|tan|sqrt|frac|overline|parallel|perp)\b", r"\\\1", text)
+    text = re.sub(r"\$\s+", "$", text)
+    text = re.sub(r"\s+\$", "$", text)
+    text = re.sub(r"\s+([，。；：、？！,.?;:])", r"\1", text)
+    text = re.sub(r"([（(])\s+", r"\1", text)
+    text = re.sub(r"\s+([）)])", r"\1", text)
+    text = re.sub(r"([=<>≤≥])\s+", r"\1", text)
+    text = re.sub(r"\s+([=<>≤≥])", r"\1", text)
+    text = re.sub(r"([\u4e00-\u9fff])\s+([△∠A-Za-z0-9])", r"\1\2", text)
+    text = re.sub(r"([A-Za-z0-9°])\s+([\u4e00-\u9fff])", r"\1\2", text)
+    return text
+
+
+def _normalize_math_notation(text: str) -> str:
+    replacements = (
+        (r"\\left\s*", ""),
+        (r"\\right\s*", ""),
+        (r"\\triangle\s*([A-Za-z]{3})", r"△\1"),
+        (r"\\angle\s*([A-Za-z0-9]+)", r"∠\1"),
+        (r"\\(?:overline|bar)\{([^{}]+)\}", r"\1"),
+        (r"\\(?:leq|le)\b", "≤"),
+        (r"\\(?:geq|ge)\b", "≥"),
+        (r"\\neq\b", "≠"),
+        (r"\\parallel\b", "∥"),
+        (r"\\perp\b", "⊥"),
+        (r"\\cdot\b", "·"),
+        (r"\\times\b", "×"),
+        (r"\\div\b", "÷"),
+        (r"\\circ\b", "°"),
+        (r"\\(cos|sin|tan)\b\s*", r"\1"),
+    )
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+
+    text = re.sub(r"\^\s*\{?\s*°\s*\}?", "°", text)
+    text = re.sub(r"\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}", r"\1/\2", text)
+    text = re.sub(r"\$([^$\n]+)\$", lambda match: match.group(1).strip(), text)
+    text = re.sub(r"(?<!\\)\$", "", text)
+    text = text.replace("\\,", "").replace("\\ ", " ")
+    return text
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { Activity, Users, HelpCircle, CheckCircle } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
 import { useConsoleStore } from '@/store/useConsoleStore'
 import { getConsoleHealth, getConsoleStats, getConsoleSessions } from '@/api/console'
+import { formatShanghaiTime } from '@/lib/utils'
 
 const Dashboard = () => {
   const { t } = useI18n()
@@ -98,7 +99,7 @@ const Dashboard = () => {
                 <div className="flex-1 min-w-0 mr-4">
                   <p className="text-white truncate">{session.problem}</p>
                   <p className="text-gray-500 text-sm mt-1">
-                    {new Date(session.created_at).toLocaleString()}
+                    {formatShanghaiTime(session.created_at)}
                   </p>
                 </div>
                 <span

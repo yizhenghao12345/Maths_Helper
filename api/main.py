@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -20,7 +21,7 @@ from models import (
 from session_store import session_store
 from problem_parser import parse_problem
 from question_generator import generate_question, _get_questions_for_problem, _get_total_steps
-from ocr_service import extract_text_from_base64, log_ocr_upload_rejection
+from ocr_service import extract_text_from_base64, get_ocr_full_config, log_ocr_upload_rejection
 from ai_service import ai_service
 from console_routes import router as console_router
 import db
@@ -32,6 +33,9 @@ IMAGE_SIGNATURES = (
     ("image/gif", (b"GIF87a", b"GIF89a")),
     ("image/webp", (b"RIFF",)),
 )
+OCR_IMAGE_MAX_EDGE = 2200
+OCR_IMAGE_MAX_BYTES = 3 * 1024 * 1024
+OCR_IMAGE_QUALITIES = (88, 82, 76, 70)
 
 
 def _detect_image_media_type(image_bytes: bytes, content_type: str | None) -> str | None:
@@ -48,6 +52,37 @@ def _detect_image_media_type(image_bytes: bytes, content_type: str | None) -> st
             return media_type
 
     return None
+
+
+def _prepare_ocr_image(image_bytes: bytes, media_type: str) -> tuple[bytes, str]:
+    try:
+        from PIL import Image, ImageOps
+
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image = ImageOps.exif_transpose(image)
+            image.thumbnail((OCR_IMAGE_MAX_EDGE, OCR_IMAGE_MAX_EDGE), Image.Resampling.LANCZOS)
+
+            if image.mode in ("RGBA", "LA"):
+                background = Image.new("RGB", image.size, "white")
+                alpha = image.getchannel("A" if image.mode == "RGBA" else "a")
+                background.paste(image.convert("RGBA"), mask=alpha)
+                image = background
+            else:
+                image = image.convert("RGB")
+
+            best_bytes = image_bytes
+            for quality in OCR_IMAGE_QUALITIES:
+                output = io.BytesIO()
+                image.save(output, format="JPEG", quality=quality, optimize=True)
+                normalized = output.getvalue()
+                best_bytes = normalized
+                if len(normalized) <= OCR_IMAGE_MAX_BYTES:
+                    break
+
+            return best_bytes, "image/jpeg"
+    except Exception as e:
+        print(f"OCR 图片预处理失败，使用原图继续: {e}", flush=True)
+        return image_bytes, media_type
 
 
 async def cleanup_sessions():
@@ -200,17 +235,7 @@ async def answer_question(request: QuestionRequest):
 
 @app.get("/health")
 async def health_check():
-    # 确定 OCR 使用的模型（优先环境变量 OCR_MODEL，其次按供应商默认）
-    ocr_model = (
-        os.getenv("OCR_MODEL")
-        or (
-            "MiniMax-M3" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "minimax"
-            else "gpt-4o-mini" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "openai"
-            else "qwen-vl-max" if (os.getenv("OCR_PROVIDER") or ai_service.provider) == "qwen"
-            else ai_service.model
-        )
-        if ai_service.enabled else "Tesseract"
-    )
+    ocr_config = get_ocr_full_config()
     return {
         "status": "ok",
         "version": "0.1.5",
@@ -219,7 +244,9 @@ async def health_check():
         "ai_model": ai_service.model if ai_service.enabled else None,
         "ai_fast_model": ai_service.fast_model if ai_service.enabled else None,
         "ai_slow_model": ai_service.slow_model if ai_service.enabled else None,
-        "ocr_model": ocr_model,
+        "ocr_enabled": ocr_config["enabled"],
+        "ocr_provider": ocr_config["provider"],
+        "ocr_model": ocr_config["model"] if ocr_config["enabled"] else "Tesseract",
     }
 
 
@@ -255,6 +282,18 @@ async def recognize_image(
         )
         raise HTTPException(status_code=400, detail="仅支持 JPG、PNG、GIF 或 WebP 图片")
 
+    original_size = len(image_bytes)
+    original_media_type = media_type
+    image_bytes, media_type = _prepare_ocr_image(image_bytes, media_type)
+    print(
+        (
+            "OCR 图片预处理: "
+            f"filename={file.filename or '-'} "
+            f"media_type={original_media_type}->{media_type} "
+            f"size={original_size}->{len(image_bytes)}"
+        ),
+        flush=True,
+    )
     base64_data = f"data:{media_type};base64,{base64.b64encode(image_bytes).decode()}"
     result = await extract_text_from_base64(base64_data, language)
     # 只返回识别的文本内容

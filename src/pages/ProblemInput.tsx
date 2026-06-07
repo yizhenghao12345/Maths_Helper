@@ -1,21 +1,30 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, Upload, Image as ImageIcon, X, Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Send, Upload, Image as ImageIcon, X, Loader2, Sparkles, CheckCircle2 } from 'lucide-react'
 import { submitProblem, recognizeImage, fetchHealth } from '@/api'
 import { useStore } from '@/store/useStore'
 import { useI18n } from '@/i18n/I18nContext'
 
 const MAX_OCR_IMAGE_SIZE = 2400
-const OCR_IMAGE_QUALITY = 0.9
+const MAX_OCR_IMAGE_BYTES = 2.5 * 1024 * 1024
+const OCR_IMAGE_QUALITIES = [0.9, 0.82, 0.74, 0.66]
+
+async function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
+  const img = document.createElement('img')
+  img.decoding = 'async'
+
+  return new Promise((resolve, reject) => {
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Image load failed'))
+    img.src = url
+  })
+}
 
 async function normalizeImageFile(file: File): Promise<{ file: File; preview: string }> {
   const objectUrl = URL.createObjectURL(file)
 
   try {
-    const img = document.createElement('img')
-    img.decoding = 'async'
-    img.src = objectUrl
-    await img.decode()
+    const img = await loadImageFromUrl(objectUrl)
 
     const scale = Math.min(1, MAX_OCR_IMAGE_SIZE / Math.max(img.naturalWidth, img.naturalHeight))
     const width = Math.max(1, Math.round(img.naturalWidth * scale))
@@ -30,9 +39,15 @@ async function normalizeImageFile(file: File): Promise<{ file: File; preview: st
     }
 
     context.drawImage(img, 0, 0, width, height)
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, 'image/jpeg', OCR_IMAGE_QUALITY)
-    })
+    let blob: Blob | null = null
+    for (const quality of OCR_IMAGE_QUALITIES) {
+      blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', quality)
+      })
+      if (blob && blob.size <= MAX_OCR_IMAGE_BYTES) {
+        break
+      }
+    }
 
     if (!blob) {
       throw new Error('Image conversion failed')
@@ -63,15 +78,26 @@ const ProblemInput = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [isRecognizing, setIsRecognizing] = useState(false)
+  const [isOcrResultReady, setIsOcrResultReady] = useState(false)
   // 页面加载时从 /health 获取当前 OCR 模型名
   const [ocrModel, setOcrModel] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     fetchHealth()
       .then((info) => setOcrModel(info.ocr_model))
       .catch(() => { /* 静默失败 */ })
   }, [])
+
+  useEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 160), 384)
+    textarea.style.height = `${nextHeight}px`
+  }, [problem])
 
   const setSessionId = useStore((state) => state.setSessionId)
   const setNodesAndEdges = useStore((state) => state.setNodesAndEdges)
@@ -90,6 +116,7 @@ const ProblemInput = () => {
     try {
       const normalized = await normalizeImageFile(file)
       setImageFile(normalized.file)
+      setIsOcrResultReady(false)
       setImagePreview((previousPreview) => {
         if (previousPreview?.startsWith('blob:')) {
           URL.revokeObjectURL(previousPreview)
@@ -110,8 +137,10 @@ const ProblemInput = () => {
 
     try {
       const result = await recognizeImage(imageFile, language)
-      if (result.text) {
-        setProblem((prev) => (prev ? prev + '\n' + result.text : result.text))
+      const recognizedText = result.text?.trim()
+      if (recognizedText) {
+        setProblem((prev) => (prev.trim() ? `${prev.trim()}\n\n${recognizedText}` : recognizedText))
+        setIsOcrResultReady(true)
       } else {
         setError(t.input.noTextRecognized)
       }
@@ -128,6 +157,7 @@ const ProblemInput = () => {
     }
     setImageFile(null)
     setImagePreview(null)
+    setIsOcrResultReady(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -276,12 +306,29 @@ const ProblemInput = () => {
                 />
               </div>
 
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <label htmlFor="problem-input" className="text-sm font-medium text-gray-700">
+                  {t.input.resultLabel}
+                </label>
+                {isOcrResultReady && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2 py-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    {t.input.resultReady}
+                  </span>
+                )}
+              </div>
+
               <textarea
+                id="problem-input"
+                ref={textareaRef}
                 value={problem}
-                onChange={(e) => setProblem(e.target.value)}
+                onChange={(e) => {
+                  setProblem(e.target.value)
+                  setIsOcrResultReady(false)
+                }}
                 placeholder={t.input.placeholder}
                 disabled={isLoading}
-                className="w-full h-32 sm:h-40 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none text-gray-700 text-base sm:text-lg"
+                className="w-full min-h-40 max-h-96 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-y overflow-y-auto text-gray-800 text-base sm:text-lg leading-7 whitespace-pre-wrap"
               />
               <div className="text-right mt-2 text-xs sm:text-sm text-gray-500">
                 {problem.length} {t.input.charCount}

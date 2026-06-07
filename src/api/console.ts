@@ -95,7 +95,7 @@ export async function getProviderPresets(): Promise<ProviderPresets> {
   return response.json()
 }
 
-export async function testConnection(params: { provider: string; api_key: string; base_url: string; model: string }): Promise<ConnectionTestResult> {
+export async function testConnection(params: { provider: string; api_key?: string; base_url: string; model: string; target?: 'ai' | 'ocr' }): Promise<ConnectionTestResult> {
   const response = await consoleFetch('/test-connection', {
     method: 'POST',
     body: JSON.stringify(params),
