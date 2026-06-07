@@ -23,6 +23,7 @@ import {
   testConnection,
   getAIConfig,
 } from '@/api/console'
+import { formatShanghaiTime } from '@/lib/utils'
 import type { AIConfigUpdate, ProviderPresets, AIFullConfig, ConnectionTestResult } from '@/types/console'
 
 const OCR_DEFAULT_MODELS: Record<string, string> = {
@@ -780,7 +781,7 @@ const AIDebug = () => {
                               ) : (
                                 <ChevronRight className="w-3 h-3 text-gray-500" />
                               )}
-                              {new Date(log.created_at).toLocaleString()}
+                              {formatShanghaiTime(log.created_at)}
                             </div>
                           </td>
                           <td className="px-4 py-3 text-gray-300 text-xs font-mono">

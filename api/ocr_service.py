@@ -18,6 +18,31 @@ OCR_DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "qwen": "qwen-vl-max",
 }
+OCR_UI_NOISE_PATTERNS = (
+    r"^\d{1,2}:\d{2}$",
+    r"^\d+\s*(字|chars?)$",
+    r"^https?://",
+    r"^[\w.-]+\.(com|cn|net|org)",
+    r"AI数学思维动态推演器",
+    r"maths-dev",
+    r"返回首页",
+    r"输入题目",
+    r"输入你要解决的数学题目",
+    r"系统将为你生成",
+    r"识别图片文字",
+    r"上传图片",
+    r"识别模型",
+    r"开始推演",
+    r"MiniMax",
+    r"Tesseract",
+    r"Recognition model",
+    r"Upload Image",
+    r"Start Deduction",
+)
+OCR_PROBLEM_START_PATTERN = re.compile(
+    r"(^|\n)\s*(?:\d+\s*[.．、]|[（(]?\d+[）)]|如图|已知|求|证明|计算|解|设|若|在\s*[$\\]?(?:triangle|△)|In\s+)",
+    re.IGNORECASE,
+)
 
 
 def _get_stored_config(key: str) -> str | None:
@@ -311,6 +336,7 @@ async def extract_text_from_base64(
     try:
         image_bytes = base64.b64decode(raw_base64)
         text = _simple_ocr(image_bytes)
+        cleaned_text = _extract_primary_problem_text(text)
         success = bool(text) and not text.startswith(("OCR 识别失败:", "未安装 OCR 依赖。"))
         _log_ocr_event(
             method="ocr:tesseract",
@@ -320,10 +346,10 @@ async def extract_text_from_base64(
             duration_ms=int((time.time() - tesseract_start) * 1000),
             success=success,
             request_id=request_id,
-            response_text=text if success else "",
+            response_text=cleaned_text if success else "",
             error_message="" if success else text or "Tesseract 返回空文本",
         )
-        return {"text": text, "model_used": "Tesseract"}
+        return {"text": cleaned_text if success else text, "model_used": "Tesseract"}
     except Exception as e:
         _log_ocr_event(
             method="ocr:tesseract",
@@ -359,31 +385,39 @@ async def _multimodal_ocr(
     if language == "en-US":
         prompt = (
             "You are a high-precision math problem recognition assistant.\n"
-            "Your ONLY task: read all text from this math problem image and output it faithfully.\n\n"
+            "Your ONLY task: extract the main math problem area from the image.\n\n"
             "Rules:\n"
-            "1. Transcribe all visible text exactly, including text below or beside any figure.\n"
-            "2. Use LaTeX for every math symbol and formula (e.g. $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
-            "3. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
+            "1. Keep only the primary math problem statement. If the image is a phone/web screenshot, ignore status bars, app titles, URLs, buttons, upload controls, OCR model labels, word counts, and any surrounding UI text.\n"
+            "2. A single main problem may contain a shared stem plus multiple subquestions such as (1)(2), ①②, I/II, or a/b. Keep all subquestions that belong to that same main problem.\n"
+            "3. If multiple unrelated problems or repeated OCR text blocks are visible, choose the clearest and most prominent actual math problem area only.\n"
+            "4. Preserve the original problem numbering and subquestion numbering when visible.\n"
+            "5. Transcribe the problem text faithfully, including text below or beside any figure.\n"
+            "6. Use LaTeX for every math symbol and formula (e.g. $AD=DE=EC$, $S_{\\triangle ABC}=1$).\n"
+            "7. If there is a geometric figure, briefly describe it AFTER the problem text:\n"
             "   - Shape type and vertex labels with positions.\n"
             "   - Key interior/boundary points and how they divide the sides.\n"
             "   - Which line segments are drawn and any labeled intersection points.\n"
             "   - Any shaded or colored region and its vertices.\n"
-            "4. Output ONLY the problem text (and figure description if present).\n"
-            "   Do NOT add any explanation, solution steps, or opening remarks."
+            "8. Output ONLY the selected main problem and its own subquestions (and figure description if needed).\n"
+            "   Do NOT add any explanation, solution steps, opening remarks, or UI text."
         )
     else:
         prompt = (
             "你是一个高精度的数学题目识别助手。\n"
-            "你唯一的任务：读取图片中的数学题目，原文输出。\n\n"
+            "你唯一的任务：从图片中提取最主要的数学题目区域。\n\n"
             "规则：\n"
-            "1. 原文转录图片中所有可见文字，包括图形下方或旁边的说明文字。\n"
-            "2. 所有数学符号和公式使用 LaTeX 语法（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
-            "3. 如果图中有几何图形，请在题目文字之后简要描述：\n"
+            "1. 只保留核心题目内容。如果图片是手机/网页截图，请忽略状态栏、应用标题、网址、按钮、上传控件、识别模型、字数统计、页面说明等 UI 文案。\n"
+            "2. 一个主题目可以包含公共题干和多个小问，例如（1）（2）、①②、I/II、a/b。只要属于同一大题，就必须完整保留这些小问。\n"
+            "3. 如果图片里有多个互不相关的题目，或同一题目被页面重复展示，只选择最清晰、最主要的实际题目区域。\n"
+            "4. 保留原题号和小问编号；不要把同一大题的小问误删。\n"
+            "5. 原文转录题干文字，包括图形下方或旁边与题目相关的说明文字。\n"
+            "6. 所有数学符号和公式使用 LaTeX 语法（如 $AD=DE=EC$、$S_{\\triangle ABC}=1$）。\n"
+            "7. 如果图中有几何图形，请在题目文字之后简要描述：\n"
             "   - 图形类型和各顶点标注与位置。\n"
             "   - 图形内部或边上的关键标注点及位置关系。\n"
             "   - 图中连接了哪些线段，以及标注的交点。\n"
             "   - 有颜色或阴影的区域及其顶点。\n"
-            "4. 只输出题目内容（及几何描述），不要加任何前言、解题过程或解释。"
+            "8. 只输出选中的主题目及其所属小问（必要时附简短图形描述），不要加前言、解题过程、解释或 UI 文案。"
         )
 
     headers = {
@@ -429,7 +463,30 @@ def _clean_response(raw: str) -> str:
     text = re.sub(r"<think>[\s\S]*?</think>", "", raw, flags=re.IGNORECASE)
     # 2. 去掉 markdown 代码块包裹
     text = re.sub(r"```[^\n]*\n?", "", text)
-    return text.strip()
+    return _extract_primary_problem_text(text)
+
+
+def _is_ocr_ui_noise(line: str) -> bool:
+    normalized = line.strip()
+    if not normalized:
+        return True
+    return any(re.search(pattern, normalized, flags=re.IGNORECASE) for pattern in OCR_UI_NOISE_PATTERNS)
+
+
+def _extract_primary_problem_text(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [line.strip() for line in text.split("\n")]
+    lines = [line for line in lines if not _is_ocr_ui_noise(line)]
+    cleaned = "\n".join(lines).strip()
+    if not cleaned:
+        return text.strip()
+
+    match = OCR_PROBLEM_START_PATTERN.search(cleaned)
+    if match:
+        cleaned = cleaned[match.start():].strip()
+
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
 
 
 # ---------------------------------------------------------------------------
