@@ -187,12 +187,41 @@ def update_session(session_id: str, **kwargs):
             conn.close()
 
 
-def list_sessions(limit: int = 20, offset: int = 0) -> list[dict]:
+def list_sessions(limit: int = 20, offset: int = 0, status: str = "all") -> list[dict]:
     conn = _get_conn()
     try:
+        where_clause = ""
+        params: list[object] = []
+        if status == "active":
+            where_clause = "WHERE s.is_completed = ?"
+            params.append(0)
+        elif status == "completed":
+            where_clause = "WHERE s.is_completed = ?"
+            params.append(1)
+
         rows = conn.execute(
-            "SELECT * FROM sessions ORDER BY last_active DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            f"""
+            SELECT
+                s.*,
+                COALESCE(q.question_count, 0) AS question_count,
+                CASE
+                    WHEN COALESCE(q.question_count, 0) = 0 THEN 0.0
+                    ELSE ROUND(CAST(q.correct_count AS REAL) / q.question_count * 100, 1)
+                END AS correct_rate
+            FROM sessions s
+            LEFT JOIN (
+                SELECT
+                    session_id,
+                    COUNT(*) AS question_count,
+                    SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct_count
+                FROM question_history
+                GROUP BY session_id
+            ) q ON q.session_id = s.id
+            {where_clause}
+            ORDER BY s.last_active DESC
+            LIMIT ? OFFSET ?
+            """,
+            (*params, limit, offset),
         ).fetchall()
         return [_row_to_session_dict(r) for r in rows]
     finally:

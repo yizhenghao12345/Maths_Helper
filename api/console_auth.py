@@ -38,7 +38,7 @@ def create_console_token() -> str:
 
 def verify_console_token(token: str) -> bool:
     val = db.get_config(f"console_token:{token}")
-    return val is not None
+    return val == "1"
 
 
 def logout_console_token(token: str):

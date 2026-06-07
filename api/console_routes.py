@@ -120,35 +120,17 @@ async def list_sessions(
     status: str = Query("all", pattern="^(active|completed|all)$"),
     user=Depends(get_current_console_user),
 ):
-    if status == "active":
-        conn = db._get_conn()
-        try:
-            rows = conn.execute(
-                "SELECT * FROM sessions WHERE is_completed = 0 ORDER BY last_active DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
-            sessions = [db._row_to_session_dict(r) for r in rows]
+    sessions = db.list_sessions(limit=limit, offset=offset, status=status)
+    conn = db._get_conn()
+    try:
+        if status == "active":
             total = conn.execute("SELECT COUNT(*) FROM sessions WHERE is_completed = 0").fetchone()[0]
-        finally:
-            conn.close()
-    elif status == "completed":
-        conn = db._get_conn()
-        try:
-            rows = conn.execute(
-                "SELECT * FROM sessions WHERE is_completed = 1 ORDER BY last_active DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
-            sessions = [db._row_to_session_dict(r) for r in rows]
+        elif status == "completed":
             total = conn.execute("SELECT COUNT(*) FROM sessions WHERE is_completed = 1").fetchone()[0]
-        finally:
-            conn.close()
-    else:
-        sessions = db.list_sessions(limit=limit, offset=offset)
-        conn = db._get_conn()
-        try:
+        else:
             total = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-        finally:
-            conn.close()
+    finally:
+        conn.close()
     return {"sessions": sessions, "total": total}
 
 

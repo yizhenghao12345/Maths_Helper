@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { Fragment, useEffect, useState, useMemo } from 'react'
 import {
   Settings,
   Eye,
@@ -766,9 +766,8 @@ const AIDebug = () => {
                   </thead>
                   <tbody>
                     {filteredLogs.map((log) => (
-                      <>
+                      <Fragment key={log.id}>
                         <tr
-                          key={log.id}
                           className="border-b border-gray-700/50 hover:bg-gray-750 cursor-pointer transition-colors"
                           onClick={() =>
                             setExpandedLogId(expandedLogId === log.id ? null : log.id)
@@ -865,7 +864,7 @@ const AIDebug = () => {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>

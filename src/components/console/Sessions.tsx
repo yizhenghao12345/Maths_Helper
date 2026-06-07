@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { Fragment, useEffect, useState, useCallback, useRef } from 'react'
 import { Trash2, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
 import { useConsoleStore } from '@/store/useConsoleStore'
@@ -147,9 +147,8 @@ const Sessions = () => {
             </thead>
             <tbody>
               {sessions.map((session) => (
-                <>
+                <Fragment key={session.id}>
                   <tr
-                    key={session.id}
                     className="border-b border-gray-700/50 hover:bg-gray-750 cursor-pointer transition-colors"
                     onClick={() => handleExpand(session.id)}
                   >
@@ -232,7 +231,7 @@ const Sessions = () => {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

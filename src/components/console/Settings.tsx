@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Settings, Save } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
-
-interface SiteSettings {
-  copyright: string
-}
+import { getSiteSettings, updateSiteSettings, type SiteSettings } from '@/api/console'
 
 const SettingsPage = () => {
   const { t } = useI18n()
@@ -13,10 +10,7 @@ const SettingsPage = () => {
   const [saveSuccess, setSaveSuccess] = useState(false)
 
   useEffect(() => {
-    fetch('/console/settings', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('console_token')}` },
-    })
-      .then((r) => r.json())
+    getSiteSettings()
       .then((data) => setSettings({ copyright: data.copyright || '' }))
       .catch(() => {})
   }, [])
@@ -25,18 +19,10 @@ const SettingsPage = () => {
     setSaving(true)
     setSaveSuccess(false)
     try {
-      const response = await fetch('/console/settings', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('console_token')}`,
-        },
-        body: JSON.stringify({ copyright: settings.copyright }),
-      })
-      if (response.ok) {
-        setSaveSuccess(true)
-        setTimeout(() => setSaveSuccess(false), 2000)
-      }
+      const nextSettings = await updateSiteSettings(settings)
+      setSettings(nextSettings)
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
     } catch {
       // ignore
     } finally {

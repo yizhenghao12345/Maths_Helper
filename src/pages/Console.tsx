@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Monitor, Bot, BarChart3, Settings, LogOut, Home, Brain } from 'lucide-react'
 import { useI18n } from '@/i18n/I18nContext'
 import { useConsoleStore } from '@/store/useConsoleStore'
-import { logoutConsole } from '@/api/console'
+import { CONSOLE_AUTH_EXPIRED_EVENT, logoutConsole } from '@/api/console'
 import ConsoleLogin from '@/components/console/ConsoleLogin'
 import Dashboard from '@/components/console/Dashboard'
 import Sessions from '@/components/console/Sessions'
@@ -28,14 +28,21 @@ const Console = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard')
 
   useEffect(() => {
+    const resetAuth = () => {
+      setAuthenticated(false)
+      reset()
+    }
     const handleUnauthorized = (e: StorageEvent) => {
       if (e.key === 'console_token' && !e.newValue) {
-        setAuthenticated(false)
-        reset()
+        resetAuth()
       }
     }
+    window.addEventListener(CONSOLE_AUTH_EXPIRED_EVENT, resetAuth)
     window.addEventListener('storage', handleUnauthorized)
-    return () => window.removeEventListener('storage', handleUnauthorized)
+    return () => {
+      window.removeEventListener(CONSOLE_AUTH_EXPIRED_EVENT, resetAuth)
+      window.removeEventListener('storage', handleUnauthorized)
+    }
   }, [setAuthenticated, reset])
 
   if (!isAuthenticated) {

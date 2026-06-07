@@ -30,11 +30,11 @@ const Analytics = () => {
     : []
 
   const correctRateData = sessions
-    .filter((s) => s.is_completed)
+    .filter((s) => s.is_completed && (s.question_count ?? 0) > 0)
     .slice(-20)
     .map((s, i) => ({
       name: `#${i + 1}`,
-      rate: s.question_count ? Math.round(Math.random() * 40 + 60) : 0,
+      rate: s.correct_rate ?? 0,
     }))
 
   const stepDistribution = sessions.reduce<Record<number, number>>((acc, s) => {

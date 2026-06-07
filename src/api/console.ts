@@ -1,6 +1,11 @@
 import type { ConsoleSession, ConsoleSessionDetail, AILog, ConsoleStats, ConsoleHealth, AIConfigUpdate, ProviderPresets, ConnectionTestResult, AIFullConfig } from '@/types/console'
 
 const CONSOLE_BASE = '/api/console'
+export const CONSOLE_AUTH_EXPIRED_EVENT = 'console-auth-expired'
+
+export interface SiteSettings {
+  copyright: string
+}
 
 async function consoleFetch(path: string, options?: RequestInit): Promise<Response> {
   const token = localStorage.getItem('console_token')
@@ -16,6 +21,7 @@ async function consoleFetch(path: string, options?: RequestInit): Promise<Respon
   const response = await fetch(`${CONSOLE_BASE}${path}`, { ...options, headers })
   if (response.status === 401) {
     localStorage.removeItem('console_token')
+    window.dispatchEvent(new Event(CONSOLE_AUTH_EXPIRED_EVENT))
     throw new Error('UNAUTHORIZED')
   }
   if (!response.ok) {
@@ -105,5 +111,18 @@ export async function testConnection(params: { provider: string; api_key?: strin
 
 export async function getAIConfig(): Promise<AIFullConfig> {
   const response = await consoleFetch('/ai-config')
+  return response.json()
+}
+
+export async function getSiteSettings(): Promise<SiteSettings> {
+  const response = await consoleFetch('/settings')
+  return response.json()
+}
+
+export async function updateSiteSettings(settings: SiteSettings): Promise<SiteSettings> {
+  const response = await consoleFetch('/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  })
   return response.json()
 }

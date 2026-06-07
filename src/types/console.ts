@@ -10,6 +10,7 @@ export interface ConsoleSession {
   created_at: string
   last_active: string
   question_count?: number
+  correct_rate?: number
 }
 
 export interface ConsoleSessionDetail extends ConsoleSession {
